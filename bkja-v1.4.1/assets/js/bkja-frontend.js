@@ -306,11 +306,36 @@
             $('.bkja-followups').remove();
         }
 
+        function sanitizeSuggestions(list, meta){
+            var arr = Array.isArray(list) ? list.slice() : [];
+            var job = '';
+            if(meta && meta.job_title){
+                job = String(meta.job_title).toLowerCase().replace(/\s+/g,'');
+            }
+            return arr.filter(function(entry){
+                if(entry === null || entry === undefined){
+                    return false;
+                }
+                var text = String(entry);
+                if(!text.trim()){
+                    return false;
+                }
+                var lower = text.toLowerCase();
+                if(/آرایش|زیبایی|سالن/.test(lower)){
+                    if(!job || lower.indexOf(job) === -1){
+                        return false;
+                    }
+                }
+                return true;
+            });
+        }
+
         function renderFollowups(items, meta){
             removeFollowups();
             if(!Array.isArray(items) || !items.length){
                 items = [];
             }
+            items = sanitizeSuggestions(items, meta);
             var unique = [];
             items.forEach(function(item){
                 if(item === null || item === undefined) return;
@@ -766,22 +791,41 @@
             function sendMessageToServer(message, opts){
                 opts = opts || {};
                 var contextMessage = opts.contextMessage || message;
-                var payload = {
-                    action: 'bkja_send_message',
-                    nonce: config.nonce,
-                    message: message,
-                    session: sessionId
-                };
-                if(opts.category){
-                    payload.category = opts.category;
-                }
-                if(cleanJobHint(opts.jobTitle)){
-                    payload.job_title = cleanJobHint(opts.jobTitle);
-                }
-                if(cleanJobHint(opts.jobSlug)){
-                    payload.job_slug = cleanJobHint(opts.jobSlug);
-                }
-                $.post(config.ajax_url, payload, function(res){
+                var payload = new URLSearchParams();
+                payload.append('action', 'bkja_send_message');
+                payload.append('nonce', config.nonce);
+                payload.append('message', message);
+                payload.append('session', sessionId);
+                payload.append('category', opts.category || '');
+                var jobTitleParam = cleanJobHint(opts.jobTitle);
+                var jobSlugParam = cleanJobHint(opts.jobSlug);
+                payload.append('job_title', jobTitleParam || '');
+                payload.append('job_slug', jobSlugParam || '');
+
+                fetch(config.ajax_url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                    },
+                    body: payload.toString()
+                }).then(function(response){
+                    return response.text().then(function(text){
+                        var data = {};
+                        if(text){
+                            try {
+                                data = JSON.parse(text);
+                            } catch(parseError){
+                                data = {};
+                            }
+                        }
+                        if(!response.ok){
+                            var error = new Error('Request failed');
+                            error.data = data;
+                            throw error;
+                        }
+                        return data;
+                    });
+                }).then(function(res){
                     personalityFlow.awaitingResult = false;
                     if(res && res.success){
                         var reply = res.data.reply || '';
@@ -818,11 +862,12 @@
                     } else {
                         pushBot('خطا در پاسخ');
                     }
-                }).fail(function(xhr){
+                }).catch(function(err){
                     personalityFlow.awaitingResult = false;
-                    if(xhr && xhr.responseJSON && xhr.responseJSON.error === 'guest_limit'){
-                        var res = xhr.responseJSON;
-                        pushBotHtml('<div style="color:#d32f2f;font-weight:700;padding:12px 0;">برای ادامه گفتگو باید عضو سایت شوید.<br> <a href="'+(res.login_url||'/wp-login.php')+'" style="color:#1976d2;text-decoration:underline;font-weight:700;">ورود یا ثبت‌نام</a></div>');
+                    var data = err && err.data ? err.data : null;
+                    if(data && data.error === 'guest_limit'){
+                        var loginUrl = (data.login_url || '/wp-login.php');
+                        pushBotHtml('<div style="color:#d32f2f;font-weight:700;padding:12px 0;">برای ادامه گفتگو باید عضو سایت شوید.<br> <a href="'+loginUrl+'" style="color:#1976d2;text-decoration:underline;font-weight:700;">ورود یا ثبت‌نام</a></div>');
                     } else {
                         pushBot('خطا در ارتباط با سرور');
                     }
