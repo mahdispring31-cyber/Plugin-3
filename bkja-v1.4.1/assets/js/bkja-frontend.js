@@ -20,10 +20,118 @@
     function bkja_log(){ try{ console.log.apply(console, ['%cBKJA','color:#fff;background:#0b79d0;padding:2px 6px;border-radius:3px;'].concat(Array.prototype.slice.call(arguments))); }catch(e){} }
 
     $(function(){
+        function ensureViewportFitCover(){
+            try {
+                var meta = document.querySelector('meta[name="viewport"]');
+                var desired = 'viewport-fit=cover';
+                if(!meta){
+                    meta = document.createElement('meta');
+                    meta.name = 'viewport';
+                    meta.content = 'width=device-width, initial-scale=1, ' + desired;
+                    document.head.appendChild(meta);
+                    return;
+                }
+                var current = meta.getAttribute('content') || '';
+                if(/viewport-fit\s*=\s*cover/i.test(current)){
+                    return;
+                }
+                if(current.trim().length){
+                    if(/[,;]\s*$/.test(current)){
+                        current += desired;
+                    } else {
+                        current += ', ' + desired;
+                    }
+                } else {
+                    current = 'width=device-width, initial-scale=1, ' + desired;
+                }
+                meta.setAttribute('content', current);
+            } catch (err) {
+                // ignore
+            }
+        }
+
+        ensureViewportFitCover();
+
+        var rootEl = document.documentElement;
+        var mobileQuery = window.matchMedia ? window.matchMedia('(max-width: 768px)') : { matches: false };
+        var baseSafeAreaBottom = null;
+        var baseSafeAreaTop = null;
+
+        function updateMobileViewportHeight(){
+            if(!mobileQuery.matches){
+                rootEl.style.removeProperty('--bkja-mobile-panel-height');
+                rootEl.style.removeProperty('--bkja-keyboard-offset');
+                rootEl.style.removeProperty('--bkja-safe-area-top');
+                rootEl.style.removeProperty('--bkja-safe-area-bottom');
+                return;
+            }
+            var viewport = window.visualViewport;
+            var layoutHeight = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight;
+            var viewportHeight = viewport ? viewport.height : layoutHeight;
+            var offsetTop = viewport ? Math.max(viewport.offsetTop, 0) : 0;
+            var bottomInset = viewport ? Math.max(0, layoutHeight - (viewportHeight + offsetTop)) : 0;
+
+            if(baseSafeAreaBottom === null || bottomInset < baseSafeAreaBottom + 1){
+                baseSafeAreaBottom = bottomInset;
+            }
+            if(baseSafeAreaTop === null || offsetTop < baseSafeAreaTop + 1){
+                baseSafeAreaTop = offsetTop;
+            }
+
+            var keyboardOffset = Math.max(0, bottomInset - (baseSafeAreaBottom || 0));
+
+            rootEl.style.setProperty('--bkja-mobile-panel-height', viewportHeight + 'px');
+            rootEl.style.setProperty('--bkja-keyboard-offset', keyboardOffset + 'px');
+            rootEl.style.setProperty('--bkja-safe-area-top', (baseSafeAreaTop || 0) + 'px');
+            rootEl.style.setProperty('--bkja-safe-area-bottom', (baseSafeAreaBottom || 0) + 'px');
+        }
+
+        updateMobileViewportHeight();
+
+        if(window.visualViewport && window.visualViewport.addEventListener){
+            window.visualViewport.addEventListener('resize', updateMobileViewportHeight);
+            window.visualViewport.addEventListener('scroll', updateMobileViewportHeight);
+        }
+
+        window.addEventListener('resize', updateMobileViewportHeight);
+        window.addEventListener('orientationchange', function(){
+            baseSafeAreaBottom = null;
+            baseSafeAreaTop = null;
+            setTimeout(updateMobileViewportHeight, 150);
+        });
+
+        if(mobileQuery && mobileQuery.addEventListener){
+            mobileQuery.addEventListener('change', function(){
+                baseSafeAreaBottom = null;
+                baseSafeAreaTop = null;
+                updateMobileViewportHeight();
+            });
+        } else if(mobileQuery && mobileQuery.addListener){
+            mobileQuery.addListener(function(){
+                baseSafeAreaBottom = null;
+                baseSafeAreaTop = null;
+                updateMobileViewportHeight();
+            });
+        }
+
         // chat submit & quick items
         var $form = $('#bkja-chat-form');
         var $input = $('#bkja-user-message');
         var $messages = $('.bkja-messages');
+
+        if($input.length){
+            $input.on('focus', function(){
+                setTimeout(function(){
+                    updateMobileViewportHeight();
+                    if($messages && $messages.length){
+                        $messages.scrollTop($messages.prop('scrollHeight'));
+                    }
+                }, 120);
+            });
+            $input.on('blur', function(){
+                setTimeout(updateMobileViewportHeight, 150);
+            });
+        }
         var lastKnownJobTitle = '';
         var lastReplyMeta = {};
         var categoryDisplayNames = {};
