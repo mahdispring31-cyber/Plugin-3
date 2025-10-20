@@ -3,6 +3,23 @@
     // Toggle dev-only meta notices in chat UI
     var SHOW_TECH_META = false;
     var config = window.BKJA || window.bkja_vars || {};
+
+    function isTruthy(value){
+        if(value === undefined || value === null){
+            return false;
+        }
+        if(typeof value === 'string'){
+            var normalized = value.toLowerCase();
+            return normalized === '1' || normalized === 'true' || normalized === 'yes';
+        }
+        if(typeof value === 'number'){
+            return value === 1;
+        }
+        if(typeof value === 'boolean'){
+            return value;
+        }
+        return false;
+    }
     if(!config.ajax_url){
         if(typeof window.ajaxurl !== 'undefined'){
             config.ajax_url = window.ajaxurl;
@@ -55,6 +72,8 @@
         ensureViewportFitCover();
 
         var rootEl = document.documentElement;
+        var quickActionsEnabled = isTruthy(config.enable_quick_actions);
+        var feedbackEnabled = isTruthy(config.enable_feedback);
         var mobileQuery = window.matchMedia ? window.matchMedia('(max-width: 768px)') : { matches: false };
         var baseSafeAreaBottom = null;
         var baseSafeAreaTop = null;
@@ -241,6 +260,9 @@
         }
 
         function buildQuickActionsForMessage($message) {
+            if(!quickActionsEnabled){
+                return null;
+            }
             var el = $message;
             if ($message && $message.jquery) {
                 el = $message.get(0);
@@ -398,6 +420,9 @@
         }
 
         function attachFeedbackControls($bubble, meta, userMessage, responseText, options){
+            if(!feedbackEnabled){
+                return;
+            }
             if(!$bubble || !$bubble.length || !config.ajax_url){
                 return;
             }
@@ -868,7 +893,7 @@
                                 }
                                 var finalSuggestions = renderFollowups(suggestions, meta);
                                 var highlightFeedback = !!opts.highlightFeedback || finalSuggestions.length === 0;
-                                if(reply && reply.length){
+                                if(feedbackEnabled && reply && reply.length){
                                     attachFeedbackControls($bubble, meta, contextMessage, reply, { highlight: highlightFeedback });
                                 }
                             }
