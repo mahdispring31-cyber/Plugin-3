@@ -358,6 +358,20 @@
             var $wrap = $('<div class="bkja-followups" role="list"></div>');
             unique.forEach(function(text){
                 var $btn = $('<button type="button" class="bkja-followup-btn" role="listitem"></button>');
+                if(meta && typeof meta === 'object'){
+                    var cat = meta.category || meta.cat || '';
+                    var jobTitle = meta.job_title || meta.jobTitle || '';
+                    var jobSlug = meta.job_slug || meta.jobSlug || '';
+                    if(cat){
+                        $btn.attr('data-category', String(cat));
+                    }
+                    if(jobTitle){
+                        $btn.attr('data-job-title', String(jobTitle));
+                    }
+                    if(jobSlug){
+                        $btn.attr('data-job-slug', String(jobSlug));
+                    }
+                }
                 $btn.html(formatMessage(text));
                 $wrap.append($btn);
             });
@@ -368,20 +382,6 @@
 
         // Delegated click handler for dynamically-rendered followup buttons
         document.addEventListener('click', function(e){
-            var btn = e.target.closest('.bkja-followup-btn');
-            if(!btn) return;
-            if(btn.disabled) return;
-
-            var text = (btn.textContent || btn.innerText || '').trim();
-            if(!text) return;
-
-            var meta = (window.lastReplyMeta || {});
-            var opts = {
-                category: meta.category || '',
-                jobTitle: meta.job_title || '',
-                jobSlug: meta.job_slug || ''
-            };
-
             if (typeof window.removeFollowups === 'function') {
                 window.removeFollowups();
             }
