@@ -382,37 +382,6 @@
 
         // Delegated click handler for dynamically-rendered followup buttons
         document.addEventListener('click', function(e){
-            if(!e){ return; }
-            var target = e.target;
-            if(!target){ return; }
-            if(target.nodeType && target.nodeType !== 1){
-                target = target.parentElement;
-            }
-            if(!target){ return; }
-
-            var btn = null;
-            if(typeof target.closest === 'function'){
-                btn = target.closest('.bkja-followup-btn');
-            }
-            if(!btn && target.classList && target.classList.contains('bkja-followup-btn')){
-                btn = target;
-            }
-            if(!btn){ return; }
-            if(btn.disabled){ return; }
-
-            var text = (btn.textContent || btn.innerText || '').trim();
-            if(!text){ return; }
-
-            var dataset = btn.dataset || {};
-            var meta = (window.lastReplyMeta || {});
-            var opts = {
-                category: dataset.category || dataset.cat || meta.category || '',
-                jobTitle: dataset.jobTitle || dataset.jobtitle || meta.job_title || '',
-                jobSlug: dataset.jobSlug || dataset.jobslug || meta.job_slug || ''
-            };
-
-            btn.disabled = true;
-
             if (typeof window.removeFollowups === 'function') {
                 window.removeFollowups();
             }
