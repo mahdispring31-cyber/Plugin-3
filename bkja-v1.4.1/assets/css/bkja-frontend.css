@@ -150,7 +150,7 @@ body.bkja-body-lock {
   overflow: hidden;
   color: var(--bkja-body);
   font-family: "IRANSans", "Vazirmatn", "Segoe UI", sans-serif;
-  z-index: 1206 !important;
+  z-index: 99997 !important;
   transform-origin: 100% 100%;
 }
 
