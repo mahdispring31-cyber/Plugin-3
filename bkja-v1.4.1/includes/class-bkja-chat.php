@@ -819,9 +819,7 @@ class BKJA_Chat {
                 if ( is_array( $cached ) ) {
                     $cached['from_cache']        = true;
                     $cached['model']             = isset( $cached['model'] ) ? $cached['model'] : $model;
-                    if ( ! isset( $cached['category'] ) || '' === $cached['category'] ) {
-                        $cached['category'] = $resolved_category;
-                    }
+                    $cached['category']          = $resolved_category;
                     $cached_job_title = '';
                     if ( ! empty( $context['job_title'] ) ) {
                         $cached_job_title = $context['job_title'];
@@ -830,17 +828,15 @@ class BKJA_Chat {
                     }
                     if ( '' !== $cached_job_title ) {
                         $cached['job_title'] = $cached_job_title;
+                    } else {
+                        $cached['job_title'] = '';
                     }
                     $cached['normalized_message'] = $normalized_message;
                     if ( ! isset( $cached['meta'] ) || ! is_array( $cached['meta'] ) ) {
                         $cached['meta'] = array();
                     }
-                    if ( ! isset( $cached['meta']['category'] ) || '' === $cached['meta']['category'] ) {
-                        $cached['meta']['category'] = $cached['category'];
-                    }
-                    if ( '' !== $cached_job_title && ( ! isset( $cached['meta']['job_title'] ) || '' === $cached['meta']['job_title'] ) ) {
-                        $cached['meta']['job_title'] = $cached_job_title;
-                    }
+                    $cached['meta']['category'] = $resolved_category;
+                    $cached['meta']['job_title'] = $cached_job_title;
                     $job_slug_value = '';
                     if ( ! empty( $context['job_slug'] ) ) {
                         $job_slug_value = $context['job_slug'];
@@ -849,12 +845,11 @@ class BKJA_Chat {
                     }
 
                     if ( '' !== $job_slug_value ) {
-                        if ( ! isset( $cached['job_slug'] ) || '' === $cached['job_slug'] ) {
-                            $cached['job_slug'] = $job_slug_value;
-                        }
-                        if ( ! isset( $cached['meta']['job_slug'] ) || '' === $cached['meta']['job_slug'] ) {
-                            $cached['meta']['job_slug'] = $job_slug_value;
-                        }
+                        $cached['job_slug']            = $job_slug_value;
+                        $cached['meta']['job_slug']    = $job_slug_value;
+                    } else {
+                        $cached['job_slug']         = '';
+                        $cached['meta']['job_slug'] = '';
                     }
                     return $cached;
                 }
