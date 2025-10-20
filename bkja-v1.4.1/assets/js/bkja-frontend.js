@@ -1,5 +1,7 @@
 (function(window, document, $){
     'use strict';
+    // Toggle dev-only meta notices in chat UI
+    var SHOW_TECH_META = false;
     var config = window.BKJA || window.bkja_vars || {};
     if(!config.ajax_url){
         if(typeof window.ajaxurl !== 'undefined'){
@@ -134,6 +136,7 @@
         }
         var lastKnownJobTitle = '';
         var lastReplyMeta = {};
+        window.lastReplyMeta = lastReplyMeta;
         var categoryDisplayNames = {};
         var personalityFlow = {
             active: false,
@@ -237,24 +240,19 @@
             return text;
         }
 
-        function buildNextStepPrompt(info){
-            info = info || {};
-            var label = info.jobTitle || mapCategoryToHumanName(info.category) || 'این حوزه';
-            return 'به من کمک کن بدانم قدم بعدی منطقی برای تحقیق بیشتر درباره ' + label + ' چیست.';
-        }
-
-        function buildQuickActionsForMessage(message){
-            var el = message;
-            if(message && message.jquery){
-                el = message.get(0);
+        function buildQuickActionsForMessage($message) {
+            var el = $message;
+            if ($message && $message.jquery) {
+                el = $message.get(0);
             }
-            if(!el){
+            if (!el) {
                 return null;
             }
+
             var dataset = el.dataset || {};
-            var cat = dataset.category || el.getAttribute('data-category') || 'generic';
-            var job = dataset.jobTitle || el.getAttribute('data-job-title') || '';
-            var slug = dataset.jobSlug || el.getAttribute('data-job-slug') || '';
+            var cat  = dataset.category || el.getAttribute('data-category') || '';
+            var job  = dataset.jobTitle || el.getAttribute('data-job-title') || '';
+            var slug = dataset.jobSlug  || el.getAttribute('data-job-slug')  || '';
 
             var wrap = document.createElement('div');
             wrap.className = 'bkja-quick-actions';
@@ -264,12 +262,12 @@
             btnNext.className = 'bkja-btn-next';
             btnNext.textContent = 'قدم بعدی منطقی';
             btnNext.addEventListener('click', function(){
-                var followup = buildNextStepPrompt({ category: cat, jobTitle: job, jobSlug: slug });
+                var label = job || 'این حوزه';
+                var followup = 'به من کمک کن بدانم قدم بعدی منطقی برای تحقیق بیشتر درباره ' + label + ' چیست.';
                 dispatchUserMessage(followup, { category: cat, jobTitle: job, jobSlug: slug });
             });
 
             wrap.appendChild(btnNext);
-
             return wrap;
         }
 
@@ -305,6 +303,7 @@
         function removeFollowups(){
             $('.bkja-followups').remove();
         }
+        window.removeFollowups = removeFollowups;
 
         function sanitizeSuggestions(list, meta){
             var arr = Array.isArray(list) ? list.slice() : [];
@@ -360,22 +359,36 @@
             unique.forEach(function(text){
                 var $btn = $('<button type="button" class="bkja-followup-btn" role="listitem"></button>');
                 $btn.html(formatMessage(text));
-                $btn.on('click', function(){
-                    removeFollowups();
-                    var followMeta = meta || {};
-                    var opts = {
-                        category: followMeta.category || '',
-                        jobTitle: followMeta.job_title || '',
-                        jobSlug: followMeta.job_slug || ''
-                    };
-                    dispatchUserMessage(text, opts);
-                });
                 $wrap.append($btn);
             });
             $messages.append($wrap);
             $messages.scrollTop($messages.prop('scrollHeight'));
             return unique;
         }
+
+        // Delegated click handler for dynamically-rendered followup buttons
+        document.addEventListener('click', function(e){
+            var btn = e.target.closest('.bkja-followup-btn');
+            if(!btn) return;
+            if(btn.disabled) return;
+
+            var text = (btn.textContent || btn.innerText || '').trim();
+            if(!text) return;
+
+            var meta = (window.lastReplyMeta || {});
+            var opts = {
+                category: meta.category || '',
+                jobTitle: meta.job_title || '',
+                jobSlug: meta.job_slug || ''
+            };
+
+            if (typeof window.removeFollowups === 'function') {
+                window.removeFollowups();
+            }
+            if (typeof window.dispatchUserMessage === 'function') {
+                window.dispatchUserMessage(text, opts);
+            }
+        }, true);
 
         function appendResponseMeta(text){
             if(!text) return;
@@ -787,6 +800,7 @@
 
                 sendMessageToServer(text, sendOptions);
             }
+            window.dispatchUserMessage = dispatchUserMessage;
 
             function sendMessageToServer(message, opts){
                 opts = opts || {};
@@ -836,18 +850,21 @@
                             lastKnownJobTitle = meta.job_title;
                         }
                         lastReplyMeta = meta;
+                        window.lastReplyMeta = lastReplyMeta;
                         pushBot(reply, {
                             onComplete: function($bubble){
                                 applyAssistantMeta($bubble, meta);
-                                if(fromCache){
-                                    appendResponseMeta('🔄 این پاسخ از حافظه کش ارائه شد تا سریع‌تر به شما نمایش داده شود.');
-                                }
-                                if(meta.source === 'database'){
-                                    appendResponseMeta('📚 این پاسخ مستقیماً از داده‌های داخلی شغل تهیه شد.');
-                                } else if(meta.source === 'job_context'){
-                                    appendResponseMeta('ℹ️ به دلیل محدودیت ارتباط با API، پاسخ بر اساس داده‌های داخلی آماده شد.');
-                                } else if(meta.context_used && meta.source === 'openai'){
-                                    appendResponseMeta('📊 برای این پاسخ از داده‌های داخلی ثبت‌شده استفاده شد.');
+                                if (SHOW_TECH_META) {
+                                    if(fromCache){
+                                        appendResponseMeta('🔄 این پاسخ از حافظه کش ارائه شد تا سریع‌تر به شما نمایش داده شود.');
+                                    }
+                                    if(meta.source === 'database'){
+                                        appendResponseMeta('📚 این پاسخ مستقیماً از داده‌های داخلی شغل تهیه شد.');
+                                    } else if(meta.source === 'job_context'){
+                                        appendResponseMeta('ℹ️ به دلیل محدودیت ارتباط با API، پاسخ بر اساس داده‌های داخلی آماده شد.');
+                                    } else if(meta.context_used && meta.source === 'openai'){
+                                        appendResponseMeta('📊 برای این پاسخ از داده‌های داخلی ثبت‌شده استفاده شد.');
+                                    }
                                 }
                                 var finalSuggestions = renderFollowups(suggestions, meta);
                                 var highlightFeedback = !!opts.highlightFeedback || finalSuggestions.length === 0;

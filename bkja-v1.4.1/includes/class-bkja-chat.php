@@ -851,6 +851,11 @@ class BKJA_Chat {
                         $cached['job_slug']         = '';
                         $cached['meta']['job_slug'] = '';
                     }
+                    if ( ! empty( $context ) ) {
+                        $cached['meta']['category']   = $context['category'] ?? ( $cached['meta']['category'] ?? null );
+                        $cached['meta']['job_title']  = $context['job_title'] ?? ( $cached['meta']['job_title'] ?? null );
+                        $cached['meta']['job_slug']   = $context['job_slug'] ?? ( $cached['meta']['job_slug'] ?? null );
+                    }
                     return $cached;
                 }
 
