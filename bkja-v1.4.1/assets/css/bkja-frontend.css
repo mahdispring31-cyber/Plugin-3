@@ -15,6 +15,10 @@
   --bkja-radius-sm: 12px;
   --bkja-shadow-soft: 0 18px 36px rgba(15, 23, 42, 0.14);
   --bkja-shadow-pop: 0 22px 42px rgba(37, 99, 235, 0.24);
+  --bkja-safe-area-top: env(safe-area-inset-top);
+  --bkja-safe-area-bottom: env(safe-area-inset-bottom);
+  --bkja-mobile-panel-height: 100dvh;
+  --bkja-keyboard-offset: 0px;
   font-feature-settings: "ss02" on;
 }
 
@@ -148,6 +152,11 @@ body.bkja-body-lock {
   font-family: "IRANSans", "Vazirmatn", "Segoe UI", sans-serif;
   z-index: 99997;
   transform-origin: 100% 100%;
+}
+
+#bkja-chatbox,
+#bkja-chatbox * {
+  box-sizing: border-box;
 }
 
 #bkja-chatbox.bkja-panel-hidden {
@@ -894,30 +903,37 @@ body.bkja-body-lock {
   .bkja-container {
     top: 0;
     right: 0;
-    bottom: 0;
+    bottom: auto;
     left: 0;
     width: 100vw;
-    height: 100vh;
+    height: var(--bkja-mobile-panel-height, 100dvh);
+    min-height: var(--bkja-mobile-panel-height, 100dvh);
+    max-height: var(--bkja-mobile-panel-height, 100dvh);
     max-width: none;
-    max-height: none;
     border-radius: 0;
     box-shadow: none;
     border: none;
   }
 
+  #bkja-chatbox {
+    padding-top: var(--bkja-safe-area-top, 0px);
+  }
+
   .bkja-header {
     padding: 16px;
+    padding-top: calc(16px + var(--bkja-safe-area-top, 0px));
     border-radius: 0;
   }
 
   .bkja-messages {
-    padding: 18px 14px 12px 14px;
+    padding: 18px 14px calc(12px + var(--bkja-keyboard-offset, 0px)) 14px;
   }
 
   .bkja-form {
     padding: 16px;
-    padding-bottom: calc(16px + constant(safe-area-inset-bottom));
-    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    padding-bottom: calc(16px + var(--bkja-safe-area-bottom, 0px) + var(--bkja-keyboard-offset, 0px));
+    padding-bottom: calc(16px + constant(safe-area-inset-bottom) + var(--bkja-keyboard-offset, 0px));
+    padding-bottom: calc(16px + env(safe-area-inset-bottom) + var(--bkja-keyboard-offset, 0px));
   }
 
   .bkja-input-row {
