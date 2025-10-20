@@ -150,6 +150,11 @@ body.bkja-body-lock {
   transform-origin: 100% 100%;
 }
 
+#bkja-chatbox,
+#bkja-chatbox * {
+  box-sizing: border-box;
+}
+
 #bkja-chatbox.bkja-panel-hidden {
   opacity: 0;
   visibility: hidden;
