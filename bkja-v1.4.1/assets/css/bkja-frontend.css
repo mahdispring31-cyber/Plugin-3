@@ -465,9 +465,13 @@ body.bkja-body-lock {
 
 .bkja-input-row {
   display: grid;
-  grid-template-columns: 1fr 60px;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
+}
+
+.bkja-input-row > * {
+  min-width: 0;
 }
 
 #bkja-user-message {
@@ -491,6 +495,8 @@ body.bkja-body-lock {
   border: none;
   border-radius: var(--bkja-radius-sm);
   height: 44px;
+  padding: 0 18px;
+  min-width: 56px;
   background: linear-gradient(135deg, var(--bkja-primary), var(--bkja-secondary));
   color: #fff;
   font-weight: 700;
@@ -499,6 +505,7 @@ body.bkja-body-lock {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  white-space: nowrap;
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
@@ -909,6 +916,17 @@ body.bkja-body-lock {
 
   .bkja-form {
     padding: 16px;
+    padding-bottom: calc(16px + constant(safe-area-inset-bottom));
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+
+  .bkja-input-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  #bkja-send {
+    min-width: 0;
+    padding: 0 16px;
   }
 
   #bkja-menu-panel.bkja-menu-panel,
