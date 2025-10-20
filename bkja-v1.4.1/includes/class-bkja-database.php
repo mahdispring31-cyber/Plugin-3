@@ -82,6 +82,14 @@ class BKJA_Database {
         if ( false === get_option( 'bkja_enable_cache', false ) ) {
             update_option( 'bkja_enable_cache', '1' );
         }
+
+        if ( false === get_option( 'bkja_enable_quick_actions', false ) ) {
+            update_option( 'bkja_enable_quick_actions', '0' );
+        }
+
+        if ( false === get_option( 'bkja_enable_feedback', false ) ) {
+            update_option( 'bkja_enable_feedback', '0' );
+        }
     }
 
     public static function deactivate(){}
