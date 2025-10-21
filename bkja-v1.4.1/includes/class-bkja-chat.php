@@ -449,36 +449,89 @@ class BKJA_Chat {
             return '';
         }
 
-        $title = $context['job_title'];
-        $lines = array();
-        $lines[] = "🔎 اطلاعات جمع‌بندی شده درباره «{$title}»:";
-        if ( ! empty( $context['summary'] ) && is_array( $context['summary'] ) ) {
-            $summary = $context['summary'];
-            if ( ! empty( $summary['income'] ) ) {
-                $lines[] = '• 💵 میانگین درآمد: ' . $summary['income'];
-            }
-            if ( ! empty( $summary['investment'] ) ) {
-                $lines[] = '• 💰 میانگین سرمایه اولیه: ' . $summary['investment'];
-            }
+        $title   = $context['job_title'];
+        $summary = ( ! empty( $context['summary'] ) && is_array( $context['summary'] ) ) ? $context['summary'] : array();
+        $records = ( ! empty( $context['records'] ) && is_array( $context['records'] ) ) ? $context['records'] : array();
+
+        $sections = array();
+
+        $sections[] = "📌 خلاصه سریع درباره «{$title}»:";
+        if ( ! empty( $summary ) ) {
+            $sections[] = '• داده‌های داخلی کاربران BKJA برای این شغل در دسترس است و اعداد زیر از همان داده‌ها استخراج شده است.';
             if ( ! empty( $summary['cities'] ) ) {
-                $lines[] = '• 📍 شهرهای پرتکرار: ' . $summary['cities'];
+                $sections[] = '• شهرهای پرتکرار: ' . $summary['cities'];
             }
             if ( ! empty( $summary['genders'] ) ) {
-                $lines[] = '• 👥 مناسب برای: ' . $summary['genders'];
-            }
-            if ( ! empty( $summary['advantages'] ) ) {
-                $lines[] = '• ⭐ مزایای پرتکرار: ' . $summary['advantages'];
-            }
-            if ( ! empty( $summary['disadvantages'] ) ) {
-                $lines[] = '• ⚠️ چالش‌های پرتکرار: ' . $summary['disadvantages'];
+                $sections[] = '• مناسب برای: ' . $summary['genders'];
             }
         } else {
-            $lines[] = '• هنوز داده‌ای درباره این شغل ثبت نشده است.';
+            $sections[] = '• هنوز داده‌ای در پایگاه ما ثبت نشده؛ بنابراین برآوردها باید با احتیاط بررسی شوند.';
         }
 
-        if ( ! empty( $context['records'] ) && is_array( $context['records'] ) ) {
-            $lines[] = '🧑‍💼 چند تجربه واقعی کاربران:';
-            foreach ( array_slice( $context['records'], 0, 2 ) as $record ) {
+        $sections[] = '';
+        $sections[] = '💵 درآمد تقریبی:';
+        $income_lines = array();
+        if ( ! empty( $summary['income'] ) ) {
+            $income_lines[] = '• حدود درآمد اعلام‌شده: ' . $summary['income'];
+        }
+        $income_samples = array();
+        foreach ( array_slice( $records, 0, 3 ) as $record ) {
+            if ( empty( $record['income'] ) ) {
+                continue;
+            }
+            $value = trim( (string) $record['income'] );
+            if ( '' !== $value && ! in_array( $value, $income_samples, true ) ) {
+                $income_samples[] = $value;
+            }
+        }
+        if ( ! empty( $income_samples ) ) {
+            $income_lines[] = '• نمونه گزارش کاربران: ' . implode( '، ', $income_samples );
+        }
+        if ( empty( $income_lines ) ) {
+            $income_lines[] = '• نامشخص (داده‌ی معتبری ثبت نشده است).';
+        }
+        $sections = array_merge( $sections, $income_lines );
+
+        $sections[] = '';
+        $sections[] = '💰 سرمایه و ملزومات راه‌اندازی:';
+        $investment_lines = array();
+        if ( ! empty( $summary['investment'] ) ) {
+            $investment_lines[] = '• حدود سرمایه اولیه: ' . $summary['investment'];
+        }
+        $investment_samples = array();
+        foreach ( array_slice( $records, 0, 3 ) as $record ) {
+            if ( empty( $record['investment'] ) ) {
+                continue;
+            }
+            $value = trim( (string) $record['investment'] );
+            if ( '' !== $value && ! in_array( $value, $investment_samples, true ) ) {
+                $investment_samples[] = $value;
+            }
+        }
+        if ( ! empty( $investment_samples ) ) {
+            $investment_lines[] = '• سرمایه‌های گزارش‌شده: ' . implode( '، ', $investment_samples );
+        }
+        if ( empty( $investment_lines ) ) {
+            $investment_lines[] = '• نامشخص (کاربران هنوز سرمایه لازم را ثبت نکرده‌اند).';
+        }
+        $sections = array_merge( $sections, $investment_lines );
+
+        $sections[] = '';
+        $sections[] = '🛠 مهارت‌های کلیدی و شرایط کاری:';
+        if ( ! empty( $summary['advantages'] ) ) {
+            $sections[] = '• مزایا: ' . $summary['advantages'];
+        }
+        if ( ! empty( $summary['disadvantages'] ) ) {
+            $sections[] = '• چالش‌های رایج: ' . $summary['disadvantages'];
+        }
+        if ( empty( $summary['advantages'] ) && empty( $summary['disadvantages'] ) ) {
+            $sections[] = '• برای شناخت مهارت‌های ضروری با فعالان این حوزه گفتگو کن یا به دوره‌های تخصصی مراجعه کن.';
+        }
+
+        if ( ! empty( $records ) ) {
+            $sections[] = '';
+            $sections[] = '🧪 چند تجربه واقعی کاربران:';
+            foreach ( array_slice( $records, 0, 2 ) as $record ) {
                 if ( ! is_array( $record ) ) {
                     continue;
                 }
@@ -493,16 +546,23 @@ class BKJA_Chat {
                     $parts[] = 'شهر: ' . $record['city'];
                 }
                 if ( ! empty( $record['details'] ) ) {
-                    $parts[] = 'توضیح: ' . $record['details'];
+                    $parts[] = 'تجربه: ' . $record['details'];
                 }
                 if ( ! empty( $parts ) ) {
-                    $lines[] = '  - ' . implode( ' | ', $parts );
+                    $sections[] = '• ' . implode( ' | ', $parts );
                 }
             }
         }
 
-        $lines[] = 'اگر بخش خاصی از این شغل برات مهمه بگو تا دقیق‌تر راهنمایی‌ات کنم.';
-        return implode( "\n", array_filter( array_map( 'trim', $lines ) ) );
+        $sections[] = '';
+        $sections[] = '🚀 قدم بعدی پیشنهادی:';
+        $sections[] = '• یک فهرست کوتاه از مهارت‌ها و ابزار لازم تهیه کن و هزینه‌ی واقعی هر کدام را برآورد کن.';
+        $sections[] = '• با دو نفر از فعالان «' . $title . '» مصاحبه کوتاه انجام بده تا برآورد درآمد و سرمایه را تأیید یا اصلاح کنی.';
+        $sections[] = '• اگر رقم سرمایه مشخصی در ذهن داری (مثلاً ۵۰۰ میلیون یا یک میلیارد تومان)، بگو تا سناریوهای مناسب همان بودجه را ارائه کنم.';
+
+        return implode( "\n", array_filter( array_map( 'trim', $sections ), function ( $line ) {
+            return $line !== '' || $line === '0';
+        } ) );
     }
 
     protected static function build_followup_suggestions( $message, $context = array(), $answer = '' ) {
@@ -626,6 +686,26 @@ class BKJA_Chat {
                 }
             }
             $push( 'به من کمک کن بدانم قدم بعدی منطقی برای تحقیق بیشتر درباره این موضوع چیست.' );
+        }
+
+        $capital_keywords = '/سرمایه|بودجه|سرمایه‌گذاری|پول|سرمایه گذاری/u';
+        if ( preg_match( $capital_keywords, $message_norm ) ) {
+            $capital_prompt = '';
+            if ( preg_match( '/([0-9۰-۹]+[0-9۰-۹\.,]*)\s*(میلیارد|میلیون|هزار)?\s*(تومان|تومن|ریال)?/u', $message_norm, $amount_match ) ) {
+                $amount_text = trim( $amount_match[0] );
+                if ( $amount_text ) {
+                    $capital_prompt = 'برای سرمایه ' . $amount_text . ' چه مسیرهای شغلی مطمئن و قابل راه‌اندازی پیشنهاد می‌کنی؟';
+                }
+            }
+
+            if ( '' === $capital_prompt ) {
+                $capital_prompt = 'اگر سرمایه مشخصی دارم چطور انتخاب کنم کدام شغل با آن بودجه قابل شروع است؟';
+            }
+
+            $capital_prompt = trim( $capital_prompt );
+            if ( $capital_prompt && ! in_array( $capital_prompt, $suggestions, true ) ) {
+                array_unshift( $suggestions, $capital_prompt );
+            }
         }
 
         return array_slice( $suggestions, 0, 3 );
@@ -777,7 +857,7 @@ class BKJA_Chat {
         }
 
         $defaults = array(
-            'system'         => 'شما یک دستیار شغلی عدد-محور هستید. پاسخ‌ها را کوتاه، مرحله‌به‌مرحله و دقیق بده. اگر داده‌ای دقیق نداری صریح اعلام کن «نامشخص» یا «تقریبی» و موضوع گفتگو را تغییر نده.',
+            'system'         => 'شما یک دستیار شغلی عدد-محور هستید. پاسخ را همیشه در پنج بخش تیتر‌دار ارائه کن: «خلاصه سریع»، «درآمد تقریبی»، «سرمایه و ملزومات»، «مهارت‌ها و مسیر رشد»، «قدم بعدی و پیشنهادهای جایگزین». در هر بخش اعداد تقریبی یا وضعیت «نامشخص/تقریبی» را شفاف بگو، تفاوت سطوح تجربه را توضیح بده و اگر کاربر سرمایه مشخصی مطرح کرده سناریوهای متناسب با همان مبلغ پیشنهاد کن. پاسخ باید موجز ولی کاربردی باشد (حداکثر شش بولت در هر بخش)، از داده‌های داخلی با ذکر منبع استفاده کن و موضوع گفتگو را تغییر نده. در پایان حتماً حداقل یک اقدام عملی برای ادامه تحقیق ارائه بده.',
             'model'          => '',
             'session_id'     => '',
             'user_id'        => 0,
