@@ -117,6 +117,7 @@ require_once BKJA_PLUGIN_DIR . 'includes/class-bkja-frontend.php';
 require_once BKJA_PLUGIN_DIR . 'includes/class-bkja-user-profile.php';
 require_once BKJA_PLUGIN_DIR . 'admin/settings.php';
 register_activation_hook( __FILE__, array( 'BKJA_Database', 'activate' ) );
+add_action( 'plugins_loaded', array( 'BKJA_Database', 'ensure_control_defaults' ), 5 );
 add_action( 'init', function(){ load_plugin_textdomain( 'bkja-assistant', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' ); if ( class_exists('BKJA_Frontend') ) BKJA_Frontend::init(); if ( class_exists('BKJA_User_Profile') ) BKJA_User_Profile::init(); });
 /* BKJA builder v1.4.1 injections */
 if ( file_exists(dirname(__FILE__) . '/includes/class-bkja-jobs.php') ) { require_once dirname(__FILE__) . '/includes/class-bkja-jobs.php'; }

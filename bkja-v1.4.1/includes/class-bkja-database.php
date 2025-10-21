@@ -83,16 +83,31 @@ class BKJA_Database {
             update_option( 'bkja_enable_cache', '1' );
         }
 
-        if ( false === get_option( 'bkja_enable_quick_actions', false ) ) {
-            update_option( 'bkja_enable_quick_actions', '0' );
-        }
-
-        if ( false === get_option( 'bkja_enable_feedback', false ) ) {
-            update_option( 'bkja_enable_feedback', '0' );
-        }
+        self::ensure_control_defaults();
     }
 
     public static function deactivate(){}
+
+    /**
+     * Ensure quick actions and feedback controls remain enabled for legacy installs.
+     */
+    public static function ensure_control_defaults() {
+        if ( get_option( 'bkja_controls_initialized' ) === '1' ) {
+            return;
+        }
+
+        $quick_actions = get_option( 'bkja_enable_quick_actions', null );
+        if ( '1' !== $quick_actions ) {
+            update_option( 'bkja_enable_quick_actions', '1' );
+        }
+
+        $feedback = get_option( 'bkja_enable_feedback', null );
+        if ( '1' !== $feedback ) {
+            update_option( 'bkja_enable_feedback', '1' );
+        }
+
+        update_option( 'bkja_controls_initialized', '1' );
+    }
 
     /**
      * insert_chat

@@ -152,7 +152,7 @@ function bkja_admin_page(){
                                 </div>
                                 <div class="bkja-form-row">
                                         <label>دکمه «قدم بعدی منطقی»</label>
-                                        <?php $quick_actions = get_option('bkja_enable_quick_actions','0'); ?>
+                                        <?php $quick_actions = get_option('bkja_enable_quick_actions','1'); ?>
                                         <select name="bkja_enable_quick_actions">
                                                 <option value="1" <?php selected($quick_actions,'1'); ?>>فعال</option>
                                                 <option value="0" <?php selected($quick_actions,'0'); ?>>غیرفعال</option>
@@ -161,7 +161,7 @@ function bkja_admin_page(){
                                 </div>
                                 <div class="bkja-form-row">
                                         <label>فرم بازخورد پاسخ</label>
-                                        <?php $feedback_enabled = get_option('bkja_enable_feedback','0'); ?>
+                                        <?php $feedback_enabled = get_option('bkja_enable_feedback','1'); ?>
                                         <select name="bkja_enable_feedback">
                                                 <option value="1" <?php selected($feedback_enabled,'1'); ?>>فعال</option>
                                                 <option value="0" <?php selected($feedback_enabled,'0'); ?>>غیرفعال</option>
@@ -445,14 +445,14 @@ if ( is_admin() ) {
                         'sanitize_callback' => function($value){
                                 return ($value === '1') ? '1' : '0';
                         },
-                        'default' => '0',
+                        'default' => '1',
                 ));
                 register_setting('bkja_settings_group', 'bkja_enable_feedback', array(
                         'type' => 'string',
                         'sanitize_callback' => function($value){
                                 return ($value === '1') ? '1' : '0';
                         },
-                        'default' => '0',
+                        'default' => '1',
                 ));
         });
 }
