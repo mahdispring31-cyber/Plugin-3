@@ -20,8 +20,8 @@ class BKJA_Frontend {
             'nonce' => wp_create_nonce('bkja_nonce'),
             'is_logged_in' => is_user_logged_in() ? 1 : 0,
             'free_limit' => (int)get_option('bkja_free_messages_per_day',5),
-            'enable_feedback' => get_option('bkja_enable_feedback','0') === '1' ? 1 : 0,
-            'enable_quick_actions' => get_option('bkja_enable_quick_actions','0') === '1' ? 1 : 0,
+            'enable_feedback' => get_option('bkja_enable_feedback','1') === '1' ? 1 : 0,
+            'enable_quick_actions' => get_option('bkja_enable_quick_actions','1') === '1' ? 1 : 0,
         );
         wp_localize_script('bkja-frontend','bkja_vars',$data);
         wp_localize_script('bkja-frontend','BKJA',$data);
