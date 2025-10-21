@@ -276,6 +276,18 @@
             var job  = dataset.jobTitle || el.getAttribute('data-job-title') || '';
             var slug = dataset.jobSlug  || el.getAttribute('data-job-slug')  || '';
 
+            if((!cat || !job || !slug) && lastReplyMeta && typeof lastReplyMeta === 'object'){
+                if(!cat && lastReplyMeta.category){
+                    cat = String(lastReplyMeta.category);
+                }
+                if(!job && lastReplyMeta.job_title){
+                    job = String(lastReplyMeta.job_title);
+                }
+                if(!slug && lastReplyMeta.job_slug){
+                    slug = String(lastReplyMeta.job_slug);
+                }
+            }
+
             var wrap = document.createElement('div');
             wrap.className = 'bkja-quick-actions';
 
@@ -404,11 +416,62 @@
 
         // Delegated click handler for dynamically-rendered followup buttons
         document.addEventListener('click', function(e){
-            if (typeof window.removeFollowups === 'function') {
-                window.removeFollowups();
+            var target = e.target || e.srcElement;
+            if(!target){
+                return;
             }
-            if (typeof window.dispatchUserMessage === 'function') {
-                window.dispatchUserMessage(text, opts);
+
+            var isFollowupButton = false;
+            if(target.classList && target.classList.contains('bkja-followup-btn')){
+                isFollowupButton = true;
+            } else if(target.closest){
+                var maybeBtn = target.closest('.bkja-followup-btn');
+                if(maybeBtn){
+                    target = maybeBtn;
+                    isFollowupButton = true;
+                }
+            }
+
+            if(!target.closest || !target.closest('.bkja-followups')){
+                if(typeof window.removeFollowups === 'function'){
+                    window.removeFollowups();
+                }
+            }
+
+            if(!isFollowupButton){
+                return;
+            }
+
+            e.preventDefault();
+
+            var followupText = '';
+            if(typeof target.getAttribute === 'function'){
+                followupText = target.getAttribute('data-message') || '';
+            }
+            if(!followupText){
+                followupText = target.textContent || target.innerText || '';
+            }
+            followupText = $.trim(String(followupText || ''));
+            if(!followupText.length){
+                return;
+            }
+
+            var opts = {};
+            if(typeof target.getAttribute === 'function'){
+                var catAttr = target.getAttribute('data-category') || '';
+                var jobTitleAttr = target.getAttribute('data-job-title') || '';
+                var jobSlugAttr = target.getAttribute('data-job-slug') || '';
+                if(catAttr){ opts.category = catAttr; }
+                if(jobTitleAttr){ opts.jobTitle = jobTitleAttr; }
+                if(jobSlugAttr){ opts.jobSlug = jobSlugAttr; }
+            }
+
+            if(typeof window.dispatchUserMessage === 'function'){
+                window.dispatchUserMessage(followupText, opts);
+            }
+
+            if(typeof window.removeFollowups === 'function'){
+                window.removeFollowups();
             }
         }, true);
 
