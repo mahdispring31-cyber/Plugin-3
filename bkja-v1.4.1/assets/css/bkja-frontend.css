@@ -151,6 +151,7 @@ body.bkja-body-lock {
   color: var(--bkja-body);
   font-family: "IRANSans", "Vazirmatn", "Segoe UI", sans-serif;
   transform-origin: 100% 100%;
+  z-index: 99997;
 }
 
 #bkja-chatbox,
