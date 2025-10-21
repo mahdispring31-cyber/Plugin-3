@@ -3,6 +3,23 @@
     // Toggle dev-only meta notices in chat UI
     var SHOW_TECH_META = false;
     var config = window.BKJA || window.bkja_vars || {};
+
+    function isTruthy(value){
+        if(value === undefined || value === null){
+            return false;
+        }
+        if(typeof value === 'string'){
+            var normalized = value.toLowerCase();
+            return normalized === '1' || normalized === 'true' || normalized === 'yes';
+        }
+        if(typeof value === 'number'){
+            return value === 1;
+        }
+        if(typeof value === 'boolean'){
+            return value;
+        }
+        return false;
+    }
     if(!config.ajax_url){
         if(typeof window.ajaxurl !== 'undefined'){
             config.ajax_url = window.ajaxurl;
@@ -55,6 +72,8 @@
         ensureViewportFitCover();
 
         var rootEl = document.documentElement;
+        var quickActionsEnabled = isTruthy(config.enable_quick_actions);
+        var feedbackEnabled = isTruthy(config.enable_feedback);
         var mobileQuery = window.matchMedia ? window.matchMedia('(max-width: 768px)') : { matches: false };
         var baseSafeAreaBottom = null;
         var baseSafeAreaTop = null;
@@ -241,6 +260,9 @@
         }
 
         function buildQuickActionsForMessage($message) {
+            if(!quickActionsEnabled){
+                return null;
+            }
             var el = $message;
             if ($message && $message.jquery) {
                 el = $message.get(0);
@@ -253,6 +275,18 @@
             var cat  = dataset.category || el.getAttribute('data-category') || '';
             var job  = dataset.jobTitle || el.getAttribute('data-job-title') || '';
             var slug = dataset.jobSlug  || el.getAttribute('data-job-slug')  || '';
+
+            if((!cat || !job || !slug) && lastReplyMeta && typeof lastReplyMeta === 'object'){
+                if(!cat && lastReplyMeta.category){
+                    cat = String(lastReplyMeta.category);
+                }
+                if(!job && lastReplyMeta.job_title){
+                    job = String(lastReplyMeta.job_title);
+                }
+                if(!slug && lastReplyMeta.job_slug){
+                    slug = String(lastReplyMeta.job_slug);
+                }
+            }
 
             var wrap = document.createElement('div');
             wrap.className = 'bkja-quick-actions';
@@ -382,11 +416,62 @@
 
         // Delegated click handler for dynamically-rendered followup buttons
         document.addEventListener('click', function(e){
-            if (typeof window.removeFollowups === 'function') {
-                window.removeFollowups();
+            var target = e.target || e.srcElement;
+            if(!target){
+                return;
             }
-            if (typeof window.dispatchUserMessage === 'function') {
-                window.dispatchUserMessage(text, opts);
+
+            var isFollowupButton = false;
+            if(target.classList && target.classList.contains('bkja-followup-btn')){
+                isFollowupButton = true;
+            } else if(target.closest){
+                var maybeBtn = target.closest('.bkja-followup-btn');
+                if(maybeBtn){
+                    target = maybeBtn;
+                    isFollowupButton = true;
+                }
+            }
+
+            if(!target.closest || !target.closest('.bkja-followups')){
+                if(typeof window.removeFollowups === 'function'){
+                    window.removeFollowups();
+                }
+            }
+
+            if(!isFollowupButton){
+                return;
+            }
+
+            e.preventDefault();
+
+            var followupText = '';
+            if(typeof target.getAttribute === 'function'){
+                followupText = target.getAttribute('data-message') || '';
+            }
+            if(!followupText){
+                followupText = target.textContent || target.innerText || '';
+            }
+            followupText = $.trim(String(followupText || ''));
+            if(!followupText.length){
+                return;
+            }
+
+            var opts = {};
+            if(typeof target.getAttribute === 'function'){
+                var catAttr = target.getAttribute('data-category') || '';
+                var jobTitleAttr = target.getAttribute('data-job-title') || '';
+                var jobSlugAttr = target.getAttribute('data-job-slug') || '';
+                if(catAttr){ opts.category = catAttr; }
+                if(jobTitleAttr){ opts.jobTitle = jobTitleAttr; }
+                if(jobSlugAttr){ opts.jobSlug = jobSlugAttr; }
+            }
+
+            if(typeof window.dispatchUserMessage === 'function'){
+                window.dispatchUserMessage(followupText, opts);
+            }
+
+            if(typeof window.removeFollowups === 'function'){
+                window.removeFollowups();
             }
         }, true);
 
@@ -398,6 +483,9 @@
         }
 
         function attachFeedbackControls($bubble, meta, userMessage, responseText, options){
+            if(!feedbackEnabled){
+                return;
+            }
             if(!$bubble || !$bubble.length || !config.ajax_url){
                 return;
             }
@@ -868,7 +956,7 @@
                                 }
                                 var finalSuggestions = renderFollowups(suggestions, meta);
                                 var highlightFeedback = !!opts.highlightFeedback || finalSuggestions.length === 0;
-                                if(reply && reply.length){
+                                if(feedbackEnabled && reply && reply.length){
                                     attachFeedbackControls($bubble, meta, contextMessage, reply, { highlight: highlightFeedback });
                                 }
                             }

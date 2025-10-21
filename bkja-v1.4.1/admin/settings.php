@@ -151,6 +151,24 @@ function bkja_admin_page(){
                                         <div class="bkja-note">در صورت فعال بودن، پاسخ‌های تکراری برای مدت کوتاه در حافظه نگهداری می‌شوند تا سرعت بیشتر شود.</div>
                                 </div>
                                 <div class="bkja-form-row">
+                                        <label>دکمه «قدم بعدی منطقی»</label>
+                                        <?php $quick_actions = get_option('bkja_enable_quick_actions','0'); ?>
+                                        <select name="bkja_enable_quick_actions">
+                                                <option value="1" <?php selected($quick_actions,'1'); ?>>فعال</option>
+                                                <option value="0" <?php selected($quick_actions,'0'); ?>>غیرفعال</option>
+                                        </select>
+                                        <div class="bkja-note">در صورت غیرفعال بودن، پس از پاسخ دستیار دکمه‌های پیشنهادی مانند «قدم بعدی منطقی» نمایش داده نمی‌شود.</div>
+                                </div>
+                                <div class="bkja-form-row">
+                                        <label>فرم بازخورد پاسخ</label>
+                                        <?php $feedback_enabled = get_option('bkja_enable_feedback','0'); ?>
+                                        <select name="bkja_enable_feedback">
+                                                <option value="1" <?php selected($feedback_enabled,'1'); ?>>فعال</option>
+                                                <option value="0" <?php selected($feedback_enabled,'0'); ?>>غیرفعال</option>
+                                        </select>
+                                        <div class="bkja-note">اگر این گزینه را غیرفعال کنید، دکمه و فرم «ثبت بازخورد پاسخ» زیر پیام‌های دستیار نمایش داده نمی‌شود.</div>
+                                </div>
+                                <div class="bkja-form-row">
                                         <label>تعداد پیام رایگان در روز</label>
                                            <input type="number" name="bkja_free_messages_per_day" value="<?php echo intval(get_option('bkja_free_messages_per_day',5)); ?>" />
                                 </div>
@@ -421,8 +439,22 @@ if ( is_admin() ) {
 		register_setting('bkja_settings_group', 'bkja_openai_api_key');
 		register_setting('bkja_settings_group', 'bkja_model');
 		register_setting('bkja_settings_group', 'bkja_free_messages_per_day');
-		register_setting('bkja_settings_group', 'bkja_enable_cache');
-	});
+                register_setting('bkja_settings_group', 'bkja_enable_cache');
+                register_setting('bkja_settings_group', 'bkja_enable_quick_actions', array(
+                        'type' => 'string',
+                        'sanitize_callback' => function($value){
+                                return ($value === '1') ? '1' : '0';
+                        },
+                        'default' => '0',
+                ));
+                register_setting('bkja_settings_group', 'bkja_enable_feedback', array(
+                        'type' => 'string',
+                        'sanitize_callback' => function($value){
+                                return ($value === '1') ? '1' : '0';
+                        },
+                        'default' => '0',
+                ));
+        });
 }
 
 /* =========================
