@@ -288,6 +288,34 @@ class BKJA_Chat {
         return true;
     }
 
+    protected static function cache_payload( $enabled, $cache_key, $payload, $model ) {
+        if ( ! $enabled ) {
+            return;
+        }
+
+        if ( '' === $cache_key || empty( $payload ) || ! is_array( $payload ) ) {
+            return;
+        }
+
+        set_transient( $cache_key, $payload, self::get_cache_ttl( $model ) );
+    }
+
+    protected static function extract_payload_job_title( $payload ) {
+        if ( empty( $payload ) || ! is_array( $payload ) ) {
+            return '';
+        }
+
+        if ( ! empty( $payload['meta'] ) && is_array( $payload['meta'] ) && ! empty( $payload['meta']['job_title'] ) ) {
+            return (string) $payload['meta']['job_title'];
+        }
+
+        if ( ! empty( $payload['job_title'] ) ) {
+            return (string) $payload['job_title'];
+        }
+
+        return '';
+    }
+
     protected static function clamp_history( $history, $limit = 3 ) {
         if ( ! is_array( $history ) || $limit <= 0 ) {
             return array();
@@ -651,6 +679,36 @@ class BKJA_Chat {
         return implode( "\n", array_filter( array_map( 'trim', $sections ), function ( $line ) {
             return $line !== '' || $line === '0';
         } ) );
+    }
+
+    protected static function build_context_fallback_payload( $context, $message, $model, $resolved_category, $normalized_message, $job_title_hint = '', $job_slug = '' ) {
+        if ( empty( $context ) || ! is_array( $context ) ) {
+            return null;
+        }
+
+        $job_title = ! empty( $context['job_title'] ) ? $context['job_title'] : $job_title_hint;
+        $slug      = '';
+
+        if ( isset( $context['job_slug'] ) && '' !== $context['job_slug'] ) {
+            $slug = $context['job_slug'];
+        } elseif ( '' !== $job_slug ) {
+            $slug = $job_slug;
+        }
+
+        return self::build_response_payload(
+            self::format_job_context_reply( $context ),
+            $context,
+            $message,
+            false,
+            'job_context',
+            array(
+                'model'              => $model,
+                'category'           => $resolved_category,
+                'job_title'          => $job_title,
+                'job_slug'           => $slug,
+                'normalized_message' => $normalized_message,
+            )
+        );
     }
 
     protected static function build_followup_suggestions( $message, $context = array(), $answer = '' ) {
@@ -1027,11 +1085,20 @@ class BKJA_Chat {
             }
         }
 
-        $cache_key           = self::build_cache_key( $normalized_message, $resolved_category, $model, $cache_job_title );
-        $legacy_cache_key    = '';
+        $cache_key        = self::build_cache_key( $normalized_message, $resolved_category, $model, $cache_job_title );
+        $legacy_cache_key = '';
         if ( $cache_enabled && '' !== $cache_job_title ) {
             $legacy_cache_key = self::build_cache_key( $normalized_message, $resolved_category, $model );
         }
+        $fallback_payload = self::build_context_fallback_payload(
+            $context,
+            $message,
+            $model,
+            $resolved_category,
+            $normalized_message,
+            $cache_job_title,
+            $job_slug
+        );
         if ( $cache_enabled ) {
             $cached = get_transient( $cache_key );
             if ( false === $cached && '' !== $legacy_cache_key ) {
@@ -1105,32 +1172,15 @@ class BKJA_Chat {
                 $db_payload['category']           = $resolved_category;
                 $db_payload['normalized_message'] = $normalized_message;
 
-                if ( $cache_enabled ) {
-                    set_transient( $cache_key, $db_payload, self::get_cache_ttl( $model ) );
-                }
+                self::cache_payload( $cache_enabled, $cache_key, $db_payload, $model );
 
                 return $db_payload;
             }
 
-            if ( ! empty( $context ) ) {
-                $fallback = self::build_response_payload(
-                    self::format_job_context_reply( $context ),
-                    $context,
-                    $message,
-                    false,
-                    'job_context',
-                    array(
-                        'model'              => $model,
-                        'category'           => $resolved_category,
-                        'job_title'          => ! empty( $context['job_title'] ) ? $context['job_title'] : $cache_job_title,
-                        'job_slug'           => ! empty( $context['job_slug'] ) ? $context['job_slug'] : $job_slug,
-                        'normalized_message' => $normalized_message,
-                    )
-                );
-                if ( $cache_enabled ) {
-                    set_transient( $cache_key, $fallback, self::get_cache_ttl( $model ) );
-                }
-                return $fallback;
+            if ( $fallback_payload ) {
+                self::cache_payload( $cache_enabled, $cache_key, $fallback_payload, $model );
+
+                return $fallback_payload;
             }
 
             return new WP_Error( 'no_api_key', 'API key not configured' );
@@ -1198,25 +1248,10 @@ class BKJA_Chat {
 
         $response = wp_remote_post( 'https://api.openai.com/v1/chat/completions', $request_args );
         if ( is_wp_error( $response ) ) {
-            if ( ! empty( $context ) ) {
-                $fallback = self::build_response_payload(
-                    self::format_job_context_reply( $context ),
-                    $context,
-                    $message,
-                    false,
-                    'job_context',
-                    array(
-                        'model'              => $model,
-                        'category'           => $resolved_category,
-                        'job_title'          => ! empty( $context['job_title'] ) ? $context['job_title'] : $cache_job_title,
-                        'job_slug'           => ! empty( $context['job_slug'] ) ? $context['job_slug'] : $job_slug,
-                        'normalized_message' => $normalized_message,
-                    )
-                );
-                if ( $cache_enabled ) {
-                    set_transient( $cache_key, $fallback, self::get_cache_ttl( $model ) );
-                }
-                return $fallback;
+            if ( $fallback_payload ) {
+                self::cache_payload( $cache_enabled, $cache_key, $fallback_payload, $model );
+
+                return $fallback_payload;
             }
 
             return $response;
@@ -1227,25 +1262,10 @@ class BKJA_Chat {
         $data = json_decode( $body, true );
 
         if ( $code < 200 || $code >= 300 || empty( $data['choices'][0]['message']['content'] ) ) {
-            if ( ! empty( $context ) ) {
-                $fallback = self::build_response_payload(
-                    self::format_job_context_reply( $context ),
-                    $context,
-                    $message,
-                    false,
-                    'job_context',
-                    array(
-                        'model'              => $model,
-                        'category'           => $resolved_category,
-                        'job_title'          => ! empty( $context['job_title'] ) ? $context['job_title'] : $cache_job_title,
-                        'job_slug'           => ! empty( $context['job_slug'] ) ? $context['job_slug'] : $job_slug,
-                        'normalized_message' => $normalized_message,
-                    )
-                );
-                if ( $cache_enabled ) {
-                    set_transient( $cache_key, $fallback, self::get_cache_ttl( $model ) );
-                }
-                return $fallback;
+            if ( $fallback_payload ) {
+                self::cache_payload( $cache_enabled, $cache_key, $fallback_payload, $model );
+
+                return $fallback_payload;
             }
 
             return new WP_Error( 'api_error', 'OpenAI error: ' . substr( $body, 0, 250 ) );
@@ -1277,23 +1297,23 @@ class BKJA_Chat {
         );
 
         if ( $cache_enabled ) {
-            $result_job_title = '';
-            if ( isset( $result['meta'] ) && is_array( $result['meta'] ) && ! empty( $result['meta']['job_title'] ) ) {
-                $result_job_title = $result['meta']['job_title'];
-            } elseif ( ! empty( $result['job_title'] ) ) {
-                $result_job_title = $result['job_title'];
-            }
+            $target_cache_key = $cache_key;
+            $result_job_title = self::extract_payload_job_title( $result );
 
             if ( '' !== $result_job_title && $result_job_title !== $cache_job_title ) {
-                $legacy_key_to_clear = self::build_cache_key( $normalized_message, $resolved_category, $model, $cache_job_title );
-                $cache_key           = self::build_cache_key( $normalized_message, $resolved_category, $model, $result_job_title );
+                $legacy_key_to_clear = '';
+                if ( '' !== $cache_job_title ) {
+                    $legacy_key_to_clear = self::build_cache_key( $normalized_message, $resolved_category, $model, $cache_job_title );
+                }
 
-                if ( $legacy_key_to_clear !== $cache_key ) {
+                $target_cache_key = self::build_cache_key( $normalized_message, $resolved_category, $model, $result_job_title );
+
+                if ( '' !== $legacy_key_to_clear && $legacy_key_to_clear !== $target_cache_key ) {
                     delete_transient( $legacy_key_to_clear );
                 }
             }
 
-            set_transient( $cache_key, $result, self::get_cache_ttl( $model ) );
+            self::cache_payload( true, $target_cache_key, $result, $model );
         }
 
         return $result;
