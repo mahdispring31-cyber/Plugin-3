@@ -109,10 +109,6 @@ class BKJA_Database {
     public static function maybe_add_indexes() {
         global $wpdb;
         $table_chats = $wpdb->prefix . 'bkja_chats';
-        $table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_chats ) );
-        if ( $table_exists !== $table_chats ) {
-            return;
-        }
         $indexes = $wpdb->get_col( "SHOW INDEX FROM {$table_chats}", 2 );
         if ( is_array( $indexes ) ) {
             if ( ! in_array( 'session_date_idx', $indexes, true ) ) {
