@@ -399,16 +399,49 @@ class BKJA_Chat {
 
         if ( ! empty( $context['summary'] ) && is_array( $context['summary'] ) ) {
             $summary = $context['summary'];
-            $lines[] = 'میانگین درآمد اعلام‌شده: ' . ( ! empty( $summary['income'] ) ? $summary['income'] : 'نامشخص/تقریبی' );
-            $lines[] = 'میانگین سرمایه لازم: ' . ( ! empty( $summary['investment'] ) ? $summary['investment'] : 'نامشخص/تقریبی' );
+
+            if ( ! empty( $summary['income'] ) ) {
+                $income_line = 'تحلیل درآمد: ' . $summary['income'];
+                if ( ! empty( $summary['income_reports'] ) ) {
+                    $income_line .= ' (بر اساس ' . number_format_i18n( (int) $summary['income_reports'] ) . ' گزارش)';
+                }
+                $lines[] = $income_line;
+            } else {
+                $lines[] = 'تحلیل درآمد: نامشخص/تقریبی';
+            }
+
+            if ( ! empty( $summary['income_top_samples'] ) && is_array( $summary['income_top_samples'] ) ) {
+                $lines[] = 'مقادیر پرتکرار درآمد: ' . implode( '، ', $summary['income_top_samples'] );
+            }
+
+            if ( ! empty( $summary['investment'] ) ) {
+                $investment_line = 'تحلیل سرمایه لازم: ' . $summary['investment'];
+                if ( ! empty( $summary['investment_reports'] ) ) {
+                    $investment_line .= ' (بر اساس ' . number_format_i18n( (int) $summary['investment_reports'] ) . ' گزارش)';
+                }
+                $lines[] = $investment_line;
+            } else {
+                $lines[] = 'تحلیل سرمایه لازم: نامشخص/تقریبی';
+            }
+
+            if ( ! empty( $summary['investment_top_samples'] ) && is_array( $summary['investment_top_samples'] ) ) {
+                $lines[] = 'مقادیر پرتکرار سرمایه: ' . implode( '، ', $summary['investment_top_samples'] );
+            }
+
             if ( ! empty( $summary['cities'] ) ) {
                 $lines[] = 'شهرهای پرتکرار تجربه‌شده: ' . $summary['cities'];
+            }
+            if ( ! empty( $summary['genders'] ) ) {
+                $lines[] = 'مخاطبان مناسب: ' . $summary['genders'];
             }
             if ( ! empty( $summary['advantages'] ) ) {
                 $lines[] = 'مزایای پرتکرار: ' . $summary['advantages'];
             }
             if ( ! empty( $summary['disadvantages'] ) ) {
                 $lines[] = 'چالش‌های پرتکرار: ' . $summary['disadvantages'];
+            }
+            if ( ! empty( $summary['records_count'] ) ) {
+                $lines[] = 'تعداد کل رکوردهای داخلی برای این عنوان: ' . number_format_i18n( (int) $summary['records_count'] );
             }
         }
 
@@ -457,12 +490,22 @@ class BKJA_Chat {
 
         $sections[] = "📌 خلاصه سریع درباره «{$title}»:";
         if ( ! empty( $summary ) ) {
-            $sections[] = '• داده‌های داخلی کاربران BKJA برای این شغل در دسترس است و اعداد زیر از همان داده‌ها استخراج شده است.';
+            $intro = '• داده‌های داخلی کاربران BKJA برای این شغل در دسترس است و اعداد زیر از همان داده‌ها استخراج شده است.';
+            if ( ! empty( $summary['records_count'] ) ) {
+                $intro .= ' (' . number_format_i18n( (int) $summary['records_count'] ) . ' تجربه ثبت شده)';
+            }
+            $sections[] = $intro;
             if ( ! empty( $summary['cities'] ) ) {
                 $sections[] = '• شهرهای پرتکرار: ' . $summary['cities'];
             }
             if ( ! empty( $summary['genders'] ) ) {
                 $sections[] = '• مناسب برای: ' . $summary['genders'];
+            }
+            if ( ! empty( $summary['advantages'] ) ) {
+                $sections[] = '• مهم‌ترین مزایا: ' . $summary['advantages'];
+            }
+            if ( ! empty( $summary['disadvantages'] ) ) {
+                $sections[] = '• چالش‌های رایج: ' . $summary['disadvantages'];
             }
         } else {
             $sections[] = '• هنوز داده‌ای در پایگاه ما ثبت نشده؛ بنابراین برآوردها باید با احتیاط بررسی شوند.';
@@ -471,8 +514,14 @@ class BKJA_Chat {
         $sections[] = '';
         $sections[] = '💵 درآمد تقریبی:';
         $income_lines = array();
-        if ( ! empty( $summary['income'] ) ) {
-            $income_lines[] = '• حدود درآمد اعلام‌شده: ' . $summary['income'];
+        if ( ! empty( $summary['income'] ) && 'نامشخص' !== $summary['income'] ) {
+            $income_lines[] = '• ' . $summary['income'];
+        }
+        if ( ! empty( $summary['income_reports'] ) ) {
+            $income_lines[] = '• تعداد گزارش‌های درآمد: ' . number_format_i18n( (int) $summary['income_reports'] );
+        }
+        if ( ! empty( $summary['income_top_samples'] ) && is_array( $summary['income_top_samples'] ) ) {
+            $income_lines[] = '• رایج‌ترین اعداد کاربران: ' . implode( '، ', $summary['income_top_samples'] );
         }
         $income_samples = array();
         foreach ( array_slice( $records, 0, 3 ) as $record ) {
@@ -495,8 +544,14 @@ class BKJA_Chat {
         $sections[] = '';
         $sections[] = '💰 سرمایه و ملزومات راه‌اندازی:';
         $investment_lines = array();
-        if ( ! empty( $summary['investment'] ) ) {
-            $investment_lines[] = '• حدود سرمایه اولیه: ' . $summary['investment'];
+        if ( ! empty( $summary['investment'] ) && 'نامشخص' !== $summary['investment'] ) {
+            $investment_lines[] = '• ' . $summary['investment'];
+        }
+        if ( ! empty( $summary['investment_reports'] ) ) {
+            $investment_lines[] = '• تعداد گزارش‌های سرمایه: ' . number_format_i18n( (int) $summary['investment_reports'] );
+        }
+        if ( ! empty( $summary['investment_top_samples'] ) && is_array( $summary['investment_top_samples'] ) ) {
+            $investment_lines[] = '• سرمایه‌های پرتکرار: ' . implode( '، ', $summary['investment_top_samples'] );
         }
         $investment_samples = array();
         foreach ( array_slice( $records, 0, 3 ) as $record ) {
@@ -875,14 +930,68 @@ class BKJA_Chat {
         $normalized_message = self::normalize_message( $message );
         $context            = self::get_job_context( $normalized_message, $job_title_hint, $job_slug );
 
-        $api_key = self::get_api_key();
-
-        $cache_enabled   = self::is_cache_enabled();
         $cache_job_title = '';
         if ( ! empty( $context['job_title'] ) ) {
             $cache_job_title = $context['job_title'];
         } elseif ( '' !== $job_title_hint ) {
             $cache_job_title = $job_title_hint;
+        }
+
+        $api_key = self::get_api_key();
+
+        if ( empty( $api_key ) ) {
+            $fallback_context = $context;
+            if ( empty( $fallback_context ) ) {
+                $fallback_context = array();
+            }
+
+            $job_title_for_meta = '';
+            if ( ! empty( $fallback_context['job_title'] ) ) {
+                $job_title_for_meta = $fallback_context['job_title'];
+            } elseif ( '' !== $cache_job_title ) {
+                $job_title_for_meta = $cache_job_title;
+            }
+
+            if ( ! empty( $fallback_context ) ) {
+                return self::build_response_payload(
+                    self::format_job_context_reply( $fallback_context ),
+                    $fallback_context,
+                    $message,
+                    false,
+                    'job_context',
+                    array(
+                        'model'              => $model,
+                        'category'           => $resolved_category,
+                        'job_title'          => $job_title_for_meta,
+                        'job_slug'           => ! empty( $fallback_context['job_slug'] ) ? $fallback_context['job_slug'] : $job_slug,
+                        'normalized_message' => $normalized_message,
+                    )
+                );
+            }
+
+            return self::build_response_payload(
+                'برای دریافت پاسخ دقیق‌تر لازم است مدیر سایت کلید API را در تنظیمات افزونه وارد کند. تا آن زمان می‌توانم صرفاً راهنمایی‌های کلی ارائه دهم.',
+                array(),
+                $message,
+                false,
+                'local_fallback',
+                array(
+                    'model'              => $model,
+                    'category'           => $resolved_category,
+                    'job_title'          => $job_title_for_meta,
+                    'job_slug'           => $job_slug,
+                    'normalized_message' => $normalized_message,
+                )
+            );
+        }
+
+        $cache_enabled   = self::is_cache_enabled();
+        if ( '' === $cache_job_title ) {
+            if ( ! empty( $context['job_title'] ) ) {
+                $cache_job_title = $context['job_title'];
+            } elseif ( '' !== $job_title_hint ) {
+                $cache_job_title = $job_title_hint;
+            }
         }
 
         $cache_key           = self::build_cache_key( $normalized_message, $resolved_category, $model, $cache_job_title );

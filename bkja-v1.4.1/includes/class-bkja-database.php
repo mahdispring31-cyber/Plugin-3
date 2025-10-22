@@ -236,6 +236,136 @@ class BKJA_Database {
     }
 
     /**
+     * تبدیل متن مبلغ به تومان بر اساس واحدهای متداول فارسی.
+     */
+    private static function bkja_parse_money_to_toman( $text ) {
+        if ( '' === trim( (string) $text ) ) {
+            return null;
+        }
+
+        $digits = self::bkja_parse_number( $text );
+        if ( '' === $digits ) {
+            return null;
+        }
+
+        $amount = (float) $digits;
+        if ( $amount <= 0 ) {
+            return null;
+        }
+
+        $normalized = function_exists( 'mb_strtolower' )
+            ? mb_strtolower( $text, 'UTF-8' )
+            : strtolower( $text );
+
+        if ( false !== strpos( $normalized, 'میلیارد' ) ) {
+            $amount *= 1000000000;
+        } elseif ( false !== strpos( $normalized, 'میلیون' ) ) {
+            $amount *= 1000000;
+        } elseif ( false !== strpos( $normalized, 'هزار' ) || false !== strpos( $normalized, 'k' ) ) {
+            $amount *= 1000;
+        }
+
+        return (int) round( $amount );
+    }
+
+    private static function bkja_format_currency( $amount ) {
+        if ( ! $amount || $amount <= 0 ) {
+            return '';
+        }
+
+        $unit      = 'تومان';
+        $formatted = '';
+
+        if ( $amount >= 1000000000 ) {
+            $value = $amount / 1000000000;
+            $formatted = number_format_i18n( $value, $value >= 10 ? 0 : 1 ) . ' میلیارد ' . $unit;
+        } elseif ( $amount >= 1000000 ) {
+            $value = $amount / 1000000;
+            $formatted = number_format_i18n( $value, $value >= 10 ? 0 : 1 ) . ' میلیون ' . $unit;
+        } elseif ( $amount >= 1000 ) {
+            $value = $amount / 1000;
+            $formatted = number_format_i18n( $value, $value >= 10 ? 0 : 1 ) . ' هزار ' . $unit;
+        } else {
+            $formatted = number_format_i18n( $amount ) . ' ' . $unit;
+        }
+
+        return trim( $formatted );
+    }
+
+    private static function bkja_summarize_common_text( $values, $limit = 3 ) {
+        if ( empty( $values ) ) {
+            return array();
+        }
+
+        $counts = array();
+        foreach ( $values as $value ) {
+            $value = trim( (string) $value );
+            if ( '' === $value ) {
+                continue;
+            }
+
+            if ( ! isset( $counts[ $value ] ) ) {
+                $counts[ $value ] = 0;
+            }
+            $counts[ $value ]++;
+        }
+
+        if ( empty( $counts ) ) {
+            return array();
+        }
+
+        arsort( $counts );
+        return array_slice( array_keys( $counts ), 0, max( 1, (int) $limit ) );
+    }
+
+    private static function bkja_implode_unique( $values, $limit = 5 ) {
+        if ( empty( $values ) ) {
+            return '';
+        }
+
+        $unique = array();
+        foreach ( $values as $value ) {
+            $value = trim( (string) $value );
+            if ( '' === $value ) {
+                continue;
+            }
+            if ( in_array( $value, $unique, true ) ) {
+                continue;
+            }
+            $unique[] = $value;
+            if ( count( $unique ) >= $limit ) {
+                break;
+            }
+        }
+
+        return implode( '، ', $unique );
+    }
+
+    private static function bkja_build_money_summary( $numeric_values, $raw_texts ) {
+        $numeric_values = array_filter( array_map( 'intval', (array) $numeric_values ) );
+        $raw_texts      = array_filter( array_map( 'trim', (array) $raw_texts ) );
+
+        $parts = array();
+        if ( ! empty( $numeric_values ) ) {
+            $avg = array_sum( $numeric_values ) / count( $numeric_values );
+            $parts[] = 'میانگین تقریبی: ' . self::bkja_format_currency( $avg );
+        }
+
+        if ( empty( $parts ) ) {
+            $parts[] = 'نامشخص';
+        }
+
+        $top_samples = self::bkja_summarize_common_text( $raw_texts, 3 );
+
+        return array(
+            'text'         => implode( ' | ', $parts ),
+            'reports'      => count( $raw_texts ),
+            'numeric'      => count( $numeric_values ),
+            'top_samples'  => $top_samples,
+        );
+    }
+
+    /**
      * get_user_history
      */
     public static function get_user_history( $user_id, $limit = 200 ){
@@ -332,31 +462,81 @@ class BKJA_Database {
         global $wpdb;
         $table = $wpdb->prefix . 'bkja_jobs';
 
-        $row = $wpdb->get_row(
+        $rows = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT 
-                    AVG(NULLIF(income, '')) AS avg_income,
-                    AVG(NULLIF(investment, '')) AS avg_investment,
-                    GROUP_CONCAT(DISTINCT city ORDER BY city SEPARATOR ', ') AS cities,
-                    GROUP_CONCAT(DISTINCT gender ORDER BY gender SEPARATOR ', ') AS genders,
-                    GROUP_CONCAT(DISTINCT advantages SEPARATOR ' | ') AS all_advantages,
-                    GROUP_CONCAT(DISTINCT disadvantages SEPARATOR ' | ') AS all_disadvantages
-                 FROM {$table}
-                 WHERE title = %s",
+                "SELECT income, investment, city, gender, advantages, disadvantages FROM {$table} WHERE title = %s",
                 $job_title
-            )
+            ),
+            ARRAY_A
         );
 
-        if ( ! $row ) return null;
+        if ( empty( $rows ) ) {
+            return null;
+        }
+
+        $income_texts      = array();
+        $income_numeric    = array();
+        $investment_texts  = array();
+        $investment_numeric= array();
+        $cities            = array();
+        $genders           = array();
+        $advantages        = array();
+        $disadvantages     = array();
+
+        foreach ( $rows as $row ) {
+            $income_text = isset( $row['income'] ) ? trim( (string) $row['income'] ) : '';
+            if ( '' !== $income_text ) {
+                $income_texts[] = $income_text;
+                $parsed_income  = self::bkja_parse_money_to_toman( $income_text );
+                if ( null !== $parsed_income ) {
+                    $income_numeric[] = $parsed_income;
+                }
+            }
+
+            $investment_text = isset( $row['investment'] ) ? trim( (string) $row['investment'] ) : '';
+            if ( '' !== $investment_text ) {
+                $investment_texts[] = $investment_text;
+                $parsed_investment = self::bkja_parse_money_to_toman( $investment_text );
+                if ( null !== $parsed_investment ) {
+                    $investment_numeric[] = $parsed_investment;
+                }
+            }
+
+            if ( ! empty( $row['city'] ) ) {
+                $cities[] = sanitize_text_field( $row['city'] );
+            }
+
+            if ( ! empty( $row['gender'] ) ) {
+                $genders[] = sanitize_text_field( $row['gender'] );
+            }
+
+            if ( ! empty( $row['advantages'] ) ) {
+                $advantages[] = wp_strip_all_tags( $row['advantages'] );
+            }
+
+            if ( ! empty( $row['disadvantages'] ) ) {
+                $disadvantages[] = wp_strip_all_tags( $row['disadvantages'] );
+            }
+        }
+
+        $income_summary     = self::bkja_build_money_summary( $income_numeric, $income_texts );
+        $investment_summary = self::bkja_build_money_summary( $investment_numeric, $investment_texts );
 
         return array(
-            'job_title'     => $job_title,
-            'income'        => $row->avg_income ? round($row->avg_income, 0) . " میلیون (میانگین)" : 'نامشخص',
-            'investment'    => $row->avg_investment ? round($row->avg_investment, 0) . " میلیون (میانگین)" : 'نامشخص',
-            'cities'        => $row->cities,
-            'genders'       => $row->genders,
-            'advantages'    => $row->all_advantages,
-            'disadvantages' => $row->all_disadvantages,
+            'job_title'              => $job_title,
+            'income'                 => $income_summary['text'],
+            'investment'             => $investment_summary['text'],
+            'cities'                 => self::bkja_implode_unique( $cities, 6 ),
+            'genders'                => self::bkja_implode_unique( $genders, 3 ),
+            'advantages'             => self::bkja_implode_unique( $advantages, 5 ),
+            'disadvantages'          => self::bkja_implode_unique( $disadvantages, 5 ),
+            'records_count'          => count( $rows ),
+            'income_reports'         => $income_summary['reports'],
+            'income_numeric_reports' => $income_summary['numeric'],
+            'investment_reports'     => $investment_summary['reports'],
+            'investment_numeric_reports' => $investment_summary['numeric'],
+            'income_top_samples'     => $income_summary['top_samples'],
+            'investment_top_samples' => $investment_summary['top_samples'],
         );
     }
 
