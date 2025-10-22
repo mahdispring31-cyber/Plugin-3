@@ -19,6 +19,25 @@ class BKJA_Chat {
         return trim( (string) $message );
     }
 
+    protected static function truncate_text( $text, $limit = 180 ) {
+        $text = is_string( $text ) ? trim( $text ) : '';
+
+        if ( '' === $text ) {
+            return '';
+        }
+
+        $length = function_exists( 'mb_strlen' ) ? mb_strlen( $text, 'UTF-8' ) : strlen( $text );
+        if ( $length <= $limit ) {
+            return $text;
+        }
+
+        $slice = function_exists( 'mb_substr' )
+            ? mb_substr( $text, 0, $limit - 1, 'UTF-8' )
+            : substr( $text, 0, $limit - 1 );
+
+        return rtrim( $slice ) . '…';
+    }
+
     protected static function normalize_lookup_text( $text ) {
         $text = self::normalize_message( $text );
 
@@ -269,7 +288,7 @@ class BKJA_Chat {
         return true;
     }
 
-    protected static function clamp_history( $history, $limit = 4 ) {
+    protected static function clamp_history( $history, $limit = 3 ) {
         if ( ! is_array( $history ) || $limit <= 0 ) {
             return array();
         }
@@ -393,27 +412,74 @@ class BKJA_Chat {
             return '';
         }
 
-        $title = $context['job_title'];
-        $lines = array();
-        $lines[] = "داده‌های داخلی ساخت‌یافته درباره شغل «{$title}»:";
+        $title     = $context['job_title'];
+        $lines     = array();
+        $lines[]   = "داده‌های داخلی ساخت‌یافته درباره شغل «{$title}»:";
+        $max_lines = 14;
+
+        $append_line = static function( &$lines, $text ) use ( $max_lines ) {
+            $text = is_string( $text ) ? trim( $text ) : '';
+            if ( '' === $text ) {
+                return;
+            }
+
+            if ( count( $lines ) >= $max_lines ) {
+                return;
+            }
+
+            $lines[] = $text;
+        };
 
         if ( ! empty( $context['summary'] ) && is_array( $context['summary'] ) ) {
             $summary = $context['summary'];
-            $lines[] = 'میانگین درآمد اعلام‌شده: ' . ( ! empty( $summary['income'] ) ? $summary['income'] : 'نامشخص/تقریبی' );
-            $lines[] = 'میانگین سرمایه لازم: ' . ( ! empty( $summary['investment'] ) ? $summary['investment'] : 'نامشخص/تقریبی' );
+
+            if ( ! empty( $summary['income'] ) ) {
+                $income_line = 'تحلیل درآمد: ' . self::truncate_text( $summary['income'], 90 );
+                if ( ! empty( $summary['income_reports'] ) ) {
+                    $income_line .= ' (بر اساس ' . number_format_i18n( (int) $summary['income_reports'] ) . ' گزارش)';
+                }
+                $append_line( $lines, $income_line );
+            } else {
+                $append_line( $lines, 'تحلیل درآمد: نامشخص/تقریبی' );
+            }
+
+            if ( ! empty( $summary['income_top_samples'] ) && is_array( $summary['income_top_samples'] ) ) {
+                $append_line( $lines, 'مقادیر پرتکرار درآمد: ' . implode( '، ', array_slice( $summary['income_top_samples'], 0, 3 ) ) );
+            }
+
+            if ( ! empty( $summary['investment'] ) ) {
+                $investment_line = 'تحلیل سرمایه لازم: ' . self::truncate_text( $summary['investment'], 90 );
+                if ( ! empty( $summary['investment_reports'] ) ) {
+                    $investment_line .= ' (بر اساس ' . number_format_i18n( (int) $summary['investment_reports'] ) . ' گزارش)';
+                }
+                $append_line( $lines, $investment_line );
+            } else {
+                $append_line( $lines, 'تحلیل سرمایه لازم: نامشخص/تقریبی' );
+            }
+
+            if ( ! empty( $summary['investment_top_samples'] ) && is_array( $summary['investment_top_samples'] ) ) {
+                $append_line( $lines, 'مقادیر پرتکرار سرمایه: ' . implode( '، ', array_slice( $summary['investment_top_samples'], 0, 3 ) ) );
+            }
+
             if ( ! empty( $summary['cities'] ) ) {
-                $lines[] = 'شهرهای پرتکرار تجربه‌شده: ' . $summary['cities'];
+                $append_line( $lines, 'شهرهای پرتکرار تجربه‌شده: ' . self::truncate_text( $summary['cities'], 80 ) );
+            }
+            if ( ! empty( $summary['genders'] ) ) {
+                $append_line( $lines, 'مخاطبان مناسب: ' . self::truncate_text( $summary['genders'], 80 ) );
             }
             if ( ! empty( $summary['advantages'] ) ) {
-                $lines[] = 'مزایای پرتکرار: ' . $summary['advantages'];
+                $append_line( $lines, 'مزایای پرتکرار: ' . self::truncate_text( $summary['advantages'], 120 ) );
             }
             if ( ! empty( $summary['disadvantages'] ) ) {
-                $lines[] = 'چالش‌های پرتکرار: ' . $summary['disadvantages'];
+                $append_line( $lines, 'چالش‌های پرتکرار: ' . self::truncate_text( $summary['disadvantages'], 120 ) );
+            }
+            if ( ! empty( $summary['records_count'] ) ) {
+                $append_line( $lines, 'تعداد کل رکوردهای داخلی برای این عنوان: ' . number_format_i18n( (int) $summary['records_count'] ) );
             }
         }
 
         if ( ! empty( $context['records'] ) && is_array( $context['records'] ) ) {
-            $records = array_slice( $context['records'], 0, 3 );
+            $records = array_slice( $context['records'], 0, 2 );
             $index   = 1;
             foreach ( $records as $record ) {
                 if ( ! is_array( $record ) ) {
@@ -426,20 +492,20 @@ class BKJA_Chat {
                     $parts[] = 'شهر: ' . $record['city'];
                 }
                 if ( ! empty( $record['advantages'] ) ) {
-                    $parts[] = 'مزایا: ' . $record['advantages'];
+                    $parts[] = 'مزایا: ' . self::truncate_text( $record['advantages'], 80 );
                 }
                 if ( ! empty( $record['disadvantages'] ) ) {
-                    $parts[] = 'معایب: ' . $record['disadvantages'];
+                    $parts[] = 'معایب: ' . self::truncate_text( $record['disadvantages'], 80 );
                 }
-                $lines[] = 'نمونه تجربه ' . $index . ': ' . implode( ' | ', array_filter( array_map( 'trim', $parts ) ) );
+                $append_line( $lines, 'نمونه تجربه ' . $index . ': ' . implode( ' | ', array_filter( array_map( 'trim', $parts ) ) ) );
                 if ( ! empty( $record['details'] ) ) {
-                    $lines[] = 'خلاصه تجربه: ' . $record['details'];
+                    $append_line( $lines, 'خلاصه تجربه: ' . self::truncate_text( $record['details'], 140 ) );
                 }
                 $index++;
             }
         }
 
-        $lines[] = 'پاسخ نهایی باید مرحله‌به‌مرحله، عدد-محور و بر اساس این داده‌ها باشد و اگر داده‌ای وجود ندارد حتماً «نامشخص/تقریبی» اعلام شود. موضوع گفتگو را تغییر نده.';
+        $append_line( $lines, 'پاسخ نهایی باید مرحله‌به‌مرحله، عدد-محور و بر اساس همین داده‌ها باشد و اگر داده‌ای وجود ندارد حتماً «نامشخص/تقریبی» اعلام شود. موضوع گفتگو را تغییر نده.' );
 
         return implode( "\n", array_filter( array_map( 'trim', $lines ) ) );
     }
@@ -457,12 +523,22 @@ class BKJA_Chat {
 
         $sections[] = "📌 خلاصه سریع درباره «{$title}»:";
         if ( ! empty( $summary ) ) {
-            $sections[] = '• داده‌های داخلی کاربران BKJA برای این شغل در دسترس است و اعداد زیر از همان داده‌ها استخراج شده است.';
+            $intro = '• داده‌های داخلی کاربران BKJA برای این شغل در دسترس است و اعداد زیر از همان داده‌ها استخراج شده است.';
+            if ( ! empty( $summary['records_count'] ) ) {
+                $intro .= ' (' . number_format_i18n( (int) $summary['records_count'] ) . ' تجربه ثبت شده)';
+            }
+            $sections[] = $intro;
             if ( ! empty( $summary['cities'] ) ) {
-                $sections[] = '• شهرهای پرتکرار: ' . $summary['cities'];
+                $sections[] = '• شهرهای پرتکرار: ' . self::truncate_text( $summary['cities'], 80 );
             }
             if ( ! empty( $summary['genders'] ) ) {
-                $sections[] = '• مناسب برای: ' . $summary['genders'];
+                $sections[] = '• مناسب برای: ' . self::truncate_text( $summary['genders'], 80 );
+            }
+            if ( ! empty( $summary['advantages'] ) ) {
+                $sections[] = '• مهم‌ترین مزایا: ' . self::truncate_text( $summary['advantages'], 120 );
+            }
+            if ( ! empty( $summary['disadvantages'] ) ) {
+                $sections[] = '• چالش‌های رایج: ' . self::truncate_text( $summary['disadvantages'], 120 );
             }
         } else {
             $sections[] = '• هنوز داده‌ای در پایگاه ما ثبت نشده؛ بنابراین برآوردها باید با احتیاط بررسی شوند.';
@@ -471,8 +547,14 @@ class BKJA_Chat {
         $sections[] = '';
         $sections[] = '💵 درآمد تقریبی:';
         $income_lines = array();
-        if ( ! empty( $summary['income'] ) ) {
-            $income_lines[] = '• حدود درآمد اعلام‌شده: ' . $summary['income'];
+        if ( ! empty( $summary['income'] ) && 'نامشخص' !== $summary['income'] ) {
+            $income_lines[] = '• ' . self::truncate_text( $summary['income'], 100 );
+        }
+        if ( ! empty( $summary['income_reports'] ) ) {
+            $income_lines[] = '• تعداد گزارش‌های درآمد: ' . number_format_i18n( (int) $summary['income_reports'] );
+        }
+        if ( ! empty( $summary['income_top_samples'] ) && is_array( $summary['income_top_samples'] ) ) {
+            $income_lines[] = '• رایج‌ترین اعداد کاربران: ' . implode( '، ', array_slice( $summary['income_top_samples'], 0, 3 ) );
         }
         $income_samples = array();
         foreach ( array_slice( $records, 0, 3 ) as $record ) {
@@ -485,7 +567,7 @@ class BKJA_Chat {
             }
         }
         if ( ! empty( $income_samples ) ) {
-            $income_lines[] = '• نمونه گزارش کاربران: ' . implode( '، ', $income_samples );
+            $income_lines[] = '• نمونه گزارش کاربران: ' . implode( '، ', array_slice( $income_samples, 0, 3 ) );
         }
         if ( empty( $income_lines ) ) {
             $income_lines[] = '• نامشخص (داده‌ی معتبری ثبت نشده است).';
@@ -495,8 +577,14 @@ class BKJA_Chat {
         $sections[] = '';
         $sections[] = '💰 سرمایه و ملزومات راه‌اندازی:';
         $investment_lines = array();
-        if ( ! empty( $summary['investment'] ) ) {
-            $investment_lines[] = '• حدود سرمایه اولیه: ' . $summary['investment'];
+        if ( ! empty( $summary['investment'] ) && 'نامشخص' !== $summary['investment'] ) {
+            $investment_lines[] = '• ' . self::truncate_text( $summary['investment'], 100 );
+        }
+        if ( ! empty( $summary['investment_reports'] ) ) {
+            $investment_lines[] = '• تعداد گزارش‌های سرمایه: ' . number_format_i18n( (int) $summary['investment_reports'] );
+        }
+        if ( ! empty( $summary['investment_top_samples'] ) && is_array( $summary['investment_top_samples'] ) ) {
+            $investment_lines[] = '• سرمایه‌های پرتکرار: ' . implode( '، ', array_slice( $summary['investment_top_samples'], 0, 3 ) );
         }
         $investment_samples = array();
         foreach ( array_slice( $records, 0, 3 ) as $record ) {
@@ -509,7 +597,7 @@ class BKJA_Chat {
             }
         }
         if ( ! empty( $investment_samples ) ) {
-            $investment_lines[] = '• سرمایه‌های گزارش‌شده: ' . implode( '، ', $investment_samples );
+            $investment_lines[] = '• سرمایه‌های گزارش‌شده: ' . implode( '، ', array_slice( $investment_samples, 0, 3 ) );
         }
         if ( empty( $investment_lines ) ) {
             $investment_lines[] = '• نامشخص (کاربران هنوز سرمایه لازم را ثبت نکرده‌اند).';
@@ -519,10 +607,10 @@ class BKJA_Chat {
         $sections[] = '';
         $sections[] = '🛠 مهارت‌های کلیدی و شرایط کاری:';
         if ( ! empty( $summary['advantages'] ) ) {
-            $sections[] = '• مزایا: ' . $summary['advantages'];
+            $sections[] = '• مزایا: ' . self::truncate_text( $summary['advantages'], 120 );
         }
         if ( ! empty( $summary['disadvantages'] ) ) {
-            $sections[] = '• چالش‌های رایج: ' . $summary['disadvantages'];
+            $sections[] = '• چالش‌های رایج: ' . self::truncate_text( $summary['disadvantages'], 120 );
         }
         if ( empty( $summary['advantages'] ) && empty( $summary['disadvantages'] ) ) {
             $sections[] = '• برای شناخت مهارت‌های ضروری با فعالان این حوزه گفتگو کن یا به دوره‌های تخصصی مراجعه کن.';
@@ -537,16 +625,16 @@ class BKJA_Chat {
                 }
                 $parts = array();
                 if ( ! empty( $record['income'] ) ) {
-                    $parts[] = 'درآمد: ' . $record['income'];
+                    $parts[] = 'درآمد: ' . self::truncate_text( $record['income'], 60 );
                 }
                 if ( ! empty( $record['investment'] ) ) {
-                    $parts[] = 'سرمایه: ' . $record['investment'];
+                    $parts[] = 'سرمایه: ' . self::truncate_text( $record['investment'], 60 );
                 }
                 if ( ! empty( $record['city'] ) ) {
                     $parts[] = 'شهر: ' . $record['city'];
                 }
                 if ( ! empty( $record['details'] ) ) {
-                    $parts[] = 'تجربه: ' . $record['details'];
+                    $parts[] = 'تجربه: ' . self::truncate_text( $record['details'], 120 );
                 }
                 if ( ! empty( $parts ) ) {
                     $sections[] = '• ' . implode( ' | ', $parts );
@@ -857,7 +945,7 @@ class BKJA_Chat {
         }
 
         $defaults = array(
-            'system'         => 'شما یک دستیار شغلی عدد-محور هستید. پاسخ را همیشه در پنج بخش تیتر‌دار ارائه کن: «خلاصه سریع»، «درآمد تقریبی»، «سرمایه و ملزومات»، «مهارت‌ها و مسیر رشد»، «قدم بعدی و پیشنهادهای جایگزین». در هر بخش اعداد تقریبی یا وضعیت «نامشخص/تقریبی» را شفاف بگو، تفاوت سطوح تجربه را توضیح بده و اگر کاربر سرمایه مشخصی مطرح کرده سناریوهای متناسب با همان مبلغ پیشنهاد کن. پاسخ باید موجز ولی کاربردی باشد (حداکثر شش بولت در هر بخش)، از داده‌های داخلی با ذکر منبع استفاده کن و موضوع گفتگو را تغییر نده. در پایان حتماً حداقل یک اقدام عملی برای ادامه تحقیق ارائه بده.',
+            'system'         => 'شما یک دستیار شغلی فارسی و عدد-محور هستید. پاسخ را در پنج بخش تیتر‌دار (خلاصه سریع، درآمد تقریبی، سرمایه و ملزومات، مهارت‌ها و مسیر رشد، قدم‌های بعدی و گزینه‌های جایگزین) با حداکثر سه بولت فشرده برای هر بخش ارائه کن. اعداد را دقیق یا با برچسب «نامشخص/تقریبی» بیان کن، اگر سرمایه‌ای مطرح شد سناریوی متناسب با همان رقم بده، به داده‌های داخلی با ذکر منبع اشاره کن و موضوع گفتگو را تغییر نده. لحن باید طبیعی اما حرفه‌ای باشد و در پایان یک اقدام عملی برای ادامه تحقیق پیشنهاد بده.',
             'model'          => '',
             'session_id'     => '',
             'user_id'        => 0,
@@ -875,14 +963,68 @@ class BKJA_Chat {
         $normalized_message = self::normalize_message( $message );
         $context            = self::get_job_context( $normalized_message, $job_title_hint, $job_slug );
 
-        $api_key = self::get_api_key();
-
-        $cache_enabled   = self::is_cache_enabled();
         $cache_job_title = '';
         if ( ! empty( $context['job_title'] ) ) {
             $cache_job_title = $context['job_title'];
         } elseif ( '' !== $job_title_hint ) {
             $cache_job_title = $job_title_hint;
+        }
+
+        $api_key = self::get_api_key();
+
+        if ( empty( $api_key ) ) {
+            $fallback_context = $context;
+            if ( empty( $fallback_context ) ) {
+                $fallback_context = array();
+            }
+
+            $job_title_for_meta = '';
+            if ( ! empty( $fallback_context['job_title'] ) ) {
+                $job_title_for_meta = $fallback_context['job_title'];
+            } elseif ( '' !== $cache_job_title ) {
+                $job_title_for_meta = $cache_job_title;
+            }
+
+            if ( ! empty( $fallback_context ) ) {
+                return self::build_response_payload(
+                    self::format_job_context_reply( $fallback_context ),
+                    $fallback_context,
+                    $message,
+                    false,
+                    'job_context',
+                    array(
+                        'model'              => $model,
+                        'category'           => $resolved_category,
+                        'job_title'          => $job_title_for_meta,
+                        'job_slug'           => ! empty( $fallback_context['job_slug'] ) ? $fallback_context['job_slug'] : $job_slug,
+                        'normalized_message' => $normalized_message,
+                    )
+                );
+            }
+
+            return self::build_response_payload(
+                'برای دریافت پاسخ دقیق‌تر لازم است مدیر سایت کلید API را در تنظیمات افزونه وارد کند. تا آن زمان می‌توانم صرفاً راهنمایی‌های کلی ارائه دهم.',
+                array(),
+                $message,
+                false,
+                'local_fallback',
+                array(
+                    'model'              => $model,
+                    'category'           => $resolved_category,
+                    'job_title'          => $job_title_for_meta,
+                    'job_slug'           => $job_slug,
+                    'normalized_message' => $normalized_message,
+                )
+            );
+        }
+
+        $cache_enabled   = self::is_cache_enabled();
+        if ( '' === $cache_job_title ) {
+            if ( ! empty( $context['job_title'] ) ) {
+                $cache_job_title = $context['job_title'];
+            } elseif ( '' !== $job_title_hint ) {
+                $cache_job_title = $job_title_hint;
+            }
         }
 
         $cache_key           = self::build_cache_key( $normalized_message, $resolved_category, $model, $cache_job_title );
@@ -1020,8 +1162,8 @@ class BKJA_Chat {
         }
 
         if ( class_exists( 'BKJA_Database' ) ) {
-            $history = BKJA_Database::get_recent_conversation( $args['session_id'], (int) $args['user_id'], 6 );
-            $history = self::clamp_history( $history, 4 );
+            $history = BKJA_Database::get_recent_conversation( $args['session_id'], (int) $args['user_id'], 5 );
+            $history = self::clamp_history( $history, 3 );
             foreach ( $history as $item ) {
                 if ( empty( $item['content'] ) ) {
                     continue;
@@ -1042,7 +1184,7 @@ class BKJA_Chat {
             'model'       => $model,
             'messages'    => $messages,
             'temperature' => 0.2,
-            'max_tokens'  => 500,
+            'max_tokens'  => 380,
         );
 
         $request_args = array(
