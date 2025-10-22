@@ -53,6 +53,8 @@ class BKJA_Database {
 
         require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
         dbDelta( $sql1 );
+        self::maybe_add_indexes();
+
         dbDelta( $sql2 );
 
         $table_feedback = $wpdb->prefix . 'bkja_feedback';
@@ -94,6 +96,25 @@ class BKJA_Database {
 
     public static function deactivate(){}
 
+    public static function maybe_add_indexes() {
+        global $wpdb;
+        $table_chats = $wpdb->prefix . 'bkja_chats';
+        $like_pattern = $wpdb->esc_like( $table_chats );
+        $table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $like_pattern ) );
+        if ( $table_exists !== $table_chats ) {
+            return;
+        }
+        $indexes = $wpdb->get_col( "SHOW INDEX FROM {$table_chats}", 2 );
+        if ( is_array( $indexes ) ) {
+            if ( ! in_array( 'session_date_idx', $indexes, true ) ) {
+                $wpdb->query( "ALTER TABLE {$table_chats} ADD INDEX session_date_idx (session_id, created_at)" );
+            }
+            if ( ! in_array( 'user_date_idx', $indexes, true ) ) {
+                $wpdb->query( "ALTER TABLE {$table_chats} ADD INDEX user_date_idx (user_id, created_at)" );
+            }
+        }
+    }
+
     /**
      * insert_chat
      * ذخیره یک پیام/پاسخ در جدول چت‌ها
@@ -102,14 +123,15 @@ class BKJA_Database {
         global $wpdb;
         $table = $wpdb->prefix . 'bkja_chats';
         $defaults = array(
-            'user_id'=>null,
-            'session_id'=>'',
-            'job_category'=>'',
-            'message'=>'',
-            'response'=>'',
-            'meta'=>null,
-            'status'=>'active',
-            'feedback'=>'none'
+            'user_id'     => null,
+            'session_id'  => '',
+            'job_category'=> '',
+            'message'     => '',
+            'response'    => '',
+            'meta'        => null,
+            'status'      => 'active',
+            'feedback'    => 'none',
+            'created_at'  => current_time( 'mysql' ),
         );
         $row = wp_parse_args( $data, $defaults );
         $row = array_map( 'wp_slash', $row ); // محافظت از داده‌ها

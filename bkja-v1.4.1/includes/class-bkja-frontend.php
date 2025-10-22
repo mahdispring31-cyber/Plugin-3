@@ -50,23 +50,40 @@ class BKJA_Frontend {
             wp_send_json_error(array('error'=>'empty_message'),400);
         }
 
-        $user_id = get_current_user_id() ?: 0;
-    $free_limit = (int)get_option('bkja_free_messages_per_day',5);
-    // تعیین آدرس ورود/عضویت ووکامرس اگر فعال است
-    $login_url = function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url();
+        $user_id    = get_current_user_id() ?: 0;
+        $free_limit = (int) get_option('bkja_free_messages_per_day', 5);
+        // تعیین آدرس ورود/عضویت ووکامرس اگر فعال است
+        $login_url = function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url();
 
         // اگر کاربر مهمان است، تعداد پیام‌های ارسالی را بررسی کن
-        if(!$user_id){
+        if ( !$user_id && $free_limit > 0 ) {
             // session_id باید مقدار داشته باشد و معتبر باشد
             if(empty($session) || strpos($session, 'guest_') !== 0){
                 wp_send_json_error(array('error'=>'invalid_session','msg'=>'جلسه مهمان معتبر نیست.'),400);
             }
             global $wpdb;
             $table = $wpdb->prefix . 'bkja_chats';
-            // فقط پیام‌های واقعی کاربر مهمان را بشمار (response باید NULL باشد)
-            $msg_count = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE session_id = %s AND message IS NOT NULL AND response IS NULL", $session));
-            if($msg_count >= $free_limit){
-                wp_send_json_error(array('error'=>'guest_limit','msg'=>'برای ادامه گفتگو باید عضو سایت شوید.','login_url'=>$login_url),403);
+            // ✅ سهمیهٔ روزانه: فقط پیام‌های امروز را برای مهمان بشمار
+            list( $start_string, $end_string ) = self::get_guest_quota_window();
+
+            $msg_count = (int) $wpdb->get_var( $wpdb->prepare(
+                "SELECT COUNT(*) FROM {$table}
+                   WHERE session_id = %s
+                     AND message IS NOT NULL
+                     AND (response IS NULL OR response = '')
+                     AND created_at >= %s
+                     AND created_at < %s",
+                $session,
+                $start_string,
+                $end_string
+            ) );
+
+            if ( $msg_count >= $free_limit ) {
+                wp_send_json_error(array(
+                    'error'     => 'guest_limit',
+                    'msg'       => 'سهمیهٔ رایگان امروز شما تمام شده. برای ادامه گفتگو عضو شوید یا فردا دوباره تلاش کنید.',
+                    'login_url' => $login_url,
+                ), 403);
             }
         }
 
@@ -156,6 +173,65 @@ class BKJA_Frontend {
             'from_cache'  => $from_cache,
             'meta'        => $meta_payload,
         ));
+    }
+
+    private static function get_guest_quota_window() {
+        $timezone = null;
+
+        if ( function_exists( 'wp_timezone' ) ) {
+            $wp_timezone = wp_timezone();
+            if ( $wp_timezone instanceof DateTimeZone ) {
+                $timezone = $wp_timezone;
+            }
+        }
+
+        if ( ! $timezone ) {
+            $timezone_string = get_option( 'timezone_string' );
+            if ( $timezone_string ) {
+                try {
+                    $timezone = new DateTimeZone( $timezone_string );
+                } catch ( Exception $e ) {
+                    $timezone = null;
+                }
+            }
+        }
+
+        if ( ! $timezone ) {
+            $offset          = (float) get_option( 'gmt_offset', 0 );
+            $offset_seconds  = (int) round( $offset * HOUR_IN_SECONDS );
+            $timezone_name   = false;
+            if ( function_exists( 'timezone_name_from_abbr' ) ) {
+                $timezone_name = timezone_name_from_abbr( '', $offset_seconds, 0 );
+            }
+
+            if ( $timezone_name ) {
+                try {
+                    $timezone = new DateTimeZone( $timezone_name );
+                } catch ( Exception $e ) {
+                    $timezone = null;
+                }
+            }
+        }
+
+        if ( ! $timezone ) {
+            $timezone = new DateTimeZone( 'UTC' );
+        }
+
+        try {
+            $start_of_day = new DateTime( 'now', $timezone );
+        } catch ( Exception $e ) {
+            $timezone     = new DateTimeZone( 'UTC' );
+            $start_of_day = new DateTime( 'now', $timezone );
+        }
+
+        $start_of_day->setTime( 0, 0, 0 );
+        $end_of_day = clone $start_of_day;
+        $end_of_day->modify( '+1 day' );
+
+        return array(
+            $start_of_day->format( 'Y-m-d H:i:s' ),
+            $end_of_day->format( 'Y-m-d H:i:s' ),
+        );
     }
 
     public static function ajax_feedback(){
