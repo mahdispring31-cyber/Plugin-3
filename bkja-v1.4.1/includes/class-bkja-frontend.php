@@ -10,6 +10,8 @@ class BKJA_Frontend {
         add_action('wp_ajax_nopriv_bkja_get_history', array(__CLASS__,'ajax_get_history'));
         add_action('wp_ajax_bkja_feedback', array(__CLASS__,'ajax_feedback'));
         add_action('wp_ajax_nopriv_bkja_feedback', array(__CLASS__,'ajax_feedback'));
+        add_action('wp_ajax_bkja_refresh_nonce', array(__CLASS__,'ajax_refresh_nonce'));
+        add_action('wp_ajax_nopriv_bkja_refresh_nonce', array(__CLASS__,'ajax_refresh_nonce'));
     }
 
     public static function enqueue_assets(){
@@ -250,5 +252,9 @@ class BKJA_Frontend {
         }
 
         wp_send_json_success(array('items'=>$items));
+    }
+
+    public static function ajax_refresh_nonce(){
+        wp_send_json_success(array('nonce' => wp_create_nonce('bkja_nonce')));
     }
 }

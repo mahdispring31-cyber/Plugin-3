@@ -39,6 +39,95 @@
     function bkja_log(){ try{ console.log.apply(console, ['%cBKJA','color:#fff;background:#0b79d0;padding:2px 6px;border-radius:3px;'].concat(Array.prototype.slice.call(arguments))); }catch(e){} }
 
     $(function(){
+        var nonceRefreshDeferred = null;
+
+        function refreshNonce(){
+            if(nonceRefreshDeferred){
+                return nonceRefreshDeferred.promise();
+            }
+            nonceRefreshDeferred = $.Deferred();
+            $.ajax({
+                type: 'POST',
+                url: config.ajax_url,
+                data: { action: 'bkja_refresh_nonce' },
+                dataType: 'json'
+            }).done(function(res){
+                if(res && res.success && res.data && res.data.nonce){
+                    config.nonce = res.data.nonce;
+                    nonceRefreshDeferred.resolve(config.nonce);
+                } else {
+                    nonceRefreshDeferred.reject(res);
+                }
+            }).fail(function(jqXHR){
+                nonceRefreshDeferred.reject(jqXHR);
+            }).always(function(){
+                nonceRefreshDeferred = null;
+            });
+            return nonceRefreshDeferred.promise();
+        }
+
+        function ajaxWithNonce(action, payload){
+            var attempt = 0;
+            var aborted = false;
+            var currentRequest = null;
+            var deferred = $.Deferred();
+
+            function run(){
+                if(aborted){
+                    return;
+                }
+                var data = $.extend({}, payload || {});
+                data.action = action;
+                data.nonce = config.nonce;
+                currentRequest = $.ajax({
+                    type: 'POST',
+                    url: config.ajax_url,
+                    data: data,
+                    dataType: 'json'
+                }).done(function(res){
+                    if(res && res.success === false && res.data && res.data.error === 'invalid_nonce' && attempt === 0){
+                        attempt++;
+                        refreshNonce().done(function(){
+                            run();
+                        }).fail(function(err){
+                            deferred.reject(err);
+                        });
+                        return;
+                    }
+                    deferred.resolve(res);
+                }).fail(function(jqXHR){
+                    if(aborted){
+                        return;
+                    }
+                    var responseText = $.trim(jqXHR && jqXHR.responseText ? jqXHR.responseText : '');
+                    var responseJSON = jqXHR && jqXHR.responseJSON ? jqXHR.responseJSON : null;
+                    var invalidNonce = responseText === '-1' || responseText === '0' || (responseJSON && responseJSON.data && responseJSON.data.error === 'invalid_nonce');
+                    if(attempt === 0 && invalidNonce){
+                        attempt++;
+                        refreshNonce().done(function(){
+                            run();
+                        }).fail(function(err){
+                            deferred.reject(err);
+                        });
+                        return;
+                    }
+                    deferred.reject(jqXHR);
+                });
+            }
+
+            run();
+
+            var promise = deferred.promise();
+            promise.abort = function(){
+                aborted = true;
+                if(currentRequest && typeof currentRequest.abort === 'function'){
+                    currentRequest.abort();
+                }
+                deferred.reject({ aborted: true });
+            };
+            return promise;
+        }
+
         function ensureViewportFitCover(){
             try {
                 var meta = document.querySelector('meta[name="viewport"]');
@@ -567,8 +656,6 @@
                 }
 
                 var payload = {
-                    action: 'bkja_feedback',
-                    nonce: config.nonce,
                     session: sessionId,
                     vote: vote,
                     message: normalizedMessage,
@@ -584,19 +671,7 @@
                     payload.tags = $.trim($tags.val());
                     payload.comment = $.trim($comment.val());
                 }
-                var requestBody = new URLSearchParams(payload).toString();
-                fetch(config.ajax_url, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                    },
-                    body: requestBody
-                }).then(function(response){
-                    if(!response.ok){
-                        throw new Error('Request failed');
-                    }
-                    return response.json();
-                }).then(function(res){
+                ajaxWithNonce('bkja_feedback', payload).done(function(res){
                     sending = false;
                     if(res && res.success){
                         $status.text('بازخورد شما ثبت شد. ممنونیم!');
@@ -609,7 +684,7 @@
                     } else {
                         $status.text('خطا در ثبت بازخورد. دوباره تلاش کنید.');
                     }
-                }).catch(function(){
+                }).fail(function(){
                     sending = false;
                     $status.text('خطا در ارتباط با سرور.');
                 });
@@ -919,41 +994,17 @@
             function sendMessageToServer(message, opts){
                 opts = opts || {};
                 var contextMessage = opts.contextMessage || message;
-                var payload = new URLSearchParams();
-                payload.append('action', 'bkja_send_message');
-                payload.append('nonce', config.nonce);
-                payload.append('message', message);
-                payload.append('session', sessionId);
-                payload.append('category', opts.category || '');
+                var payload = {
+                    message: message,
+                    session: sessionId,
+                    category: opts.category || ''
+                };
                 var jobTitleParam = cleanJobHint(opts.jobTitle);
                 var jobSlugParam = cleanJobHint(opts.jobSlug);
-                payload.append('job_title', jobTitleParam || '');
-                payload.append('job_slug', jobSlugParam || '');
+                payload.job_title = jobTitleParam || '';
+                payload.job_slug = jobSlugParam || '';
 
-                fetch(config.ajax_url, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                    },
-                    body: payload.toString()
-                }).then(function(response){
-                    return response.text().then(function(text){
-                        var data = {};
-                        if(text){
-                            try {
-                                data = JSON.parse(text);
-                            } catch(parseError){
-                                data = {};
-                            }
-                        }
-                        if(!response.ok){
-                            var error = new Error('Request failed');
-                            error.data = data;
-                            throw error;
-                        }
-                        return data;
-                    });
-                }).then(function(res){
+                ajaxWithNonce('bkja_send_message', payload).done(function(res){
                     personalityFlow.awaitingResult = false;
                     if(res && res.success){
                         var reply = res.data.reply || '';
@@ -987,17 +1038,27 @@
                                 }
                             }
                         });
-                    } else if(res && res.error === 'guest_limit'){
-                        var loginUrl = (res.login_url || '/wp-login.php');
+                    } else if(res && res.data && res.data.error === 'guest_limit'){
+                        var loginUrl = (res.data.login_url || '/wp-login.php');
                         pushBotHtml('<div style="color:#d32f2f;font-weight:700;padding:12px 0;">برای ادامه گفتگو باید عضو سایت شوید.<br> <a href="'+loginUrl+'" style="color:#1976d2;text-decoration:underline;font-weight:700;">ورود یا ثبت‌نام</a></div>');
                     } else {
                         pushBot('خطا در پاسخ');
                     }
-                }).catch(function(err){
+                }).fail(function(jqXHR){
                     personalityFlow.awaitingResult = false;
-                    var data = err && err.data ? err.data : null;
-                    if(data && data.error === 'guest_limit'){
-                        var loginUrl = (data.login_url || '/wp-login.php');
+                    var data = null;
+                    if(jqXHR && jqXHR.responseJSON){
+                        data = jqXHR.responseJSON;
+                    } else if(jqXHR && jqXHR.responseText){
+                        try {
+                            data = JSON.parse(jqXHR.responseText);
+                        } catch(parseErr){
+                            data = null;
+                        }
+                    }
+                    var errorPayload = data && data.data ? data.data : (data && data.error ? data : null);
+                    if(errorPayload && errorPayload.error === 'guest_limit'){
+                        var loginUrl = (errorPayload.login_url || '/wp-login.php');
                         pushBotHtml('<div style="color:#d32f2f;font-weight:700;padding:12px 0;">برای ادامه گفتگو باید عضو سایت شوید.<br> <a href="'+loginUrl+'" style="color:#1976d2;text-decoration:underline;font-weight:700;">ورود یا ثبت‌نام</a></div>');
                     } else {
                         pushBot('خطا در ارتباط با سرور');
@@ -1056,11 +1117,10 @@
             $btn.attr('aria-expanded','true');
             $panel.html('<div class="bkja-history-title">گفتگوهای شما</div><div class="bkja-history-loading">⏳ در حال بارگذاری تاریخچه...</div>');
 
-            activeHistoryRequest = $.post(config.ajax_url, {
-                action: "bkja_get_history",
-                nonce: config.nonce,
+            activeHistoryRequest = ajaxWithNonce('bkja_get_history', {
                 session: sessionId
-            }, function(res){
+            });
+            activeHistoryRequest.done(function(res){
                 if(res && res.success){
                     // حذف زیر دسته‌های باز هنگام نمایش تاریخچه
                     $(".bkja-jobs-sublist").remove();
@@ -1140,10 +1200,8 @@
             }
             renderHistoryButton();
             $list.empty().append('<li class="bkja-job-loading">⏳ در حال دریافت دسته‌بندی‌ها...</li>');
-            categoriesRequest = $.post(config.ajax_url, {
-                action: "bkja_get_categories",
-                nonce: config.nonce
-            }, function(res){
+            categoriesRequest = ajaxWithNonce('bkja_get_categories', {});
+            categoriesRequest.done(function(res){
                 var $target = $("#bkja-categories-list").empty();
                 if(res && res.success && res.data && res.data.categories && res.data.categories.length){
                     res.data.categories.forEach(function(cat){
@@ -1220,11 +1278,10 @@
                 $(this).css('display','flex');
             });
 
-            activeCategoryRequest = $.post(config.ajax_url,{
-                action:"bkja_get_jobs",
-                nonce:config.nonce,
-                category_id:catId
-            },function(res){
+            activeCategoryRequest = ajaxWithNonce('bkja_get_jobs', {
+                category_id: catId
+            });
+            activeCategoryRequest.done(function(res){
                 var $sub = $cat.next('.bkja-jobs-sublist');
                 if(!$sub.length){ return; }
                 $sub.empty();
@@ -1267,22 +1324,17 @@
         function showJobSummaryAndRecords(job_title) {
             // دریافت خلاصه و اولین سری رکوردها با هم
             $.when(
-                $.post(config.ajax_url, {
-                    action: "bkja_get_job_summary",
-                    nonce: config.nonce,
+                ajaxWithNonce('bkja_get_job_summary', {
                     job_title: job_title
                 }),
-                $.post(config.ajax_url, {
-                    action: "bkja_get_job_records",
-                    nonce: config.nonce,
+                ajaxWithNonce('bkja_get_job_records', {
                     job_title: job_title,
                     limit: 5,
                     offset: 0
                 })
             ).done(function(summaryRes, recordsRes) {
-                var s = summaryRes[0] && summaryRes[0].success && summaryRes[0].data && summaryRes[0].data.summary ? summaryRes[0].data.summary : null;
-                var records = recordsRes[0] && recordsRes[0].success && recordsRes[0].data && recordsRes[0].data.records ? recordsRes[0].data.records : [];
-                var totalCount = recordsRes[0] && recordsRes[0].success && recordsRes[0].data && typeof recordsRes[0].data.total_count !== 'undefined' ? recordsRes[0].data.total_count : records.length;
+                var s = summaryRes && summaryRes.success && summaryRes.data && summaryRes.data.summary ? summaryRes.data.summary : null;
+                var records = recordsRes && recordsRes.success && recordsRes.data && recordsRes.data.records ? recordsRes.data.records : [];
                 var html = '<div class="bkja-job-summary-card">';
                 html += '<div class="bkja-job-summary-header">';
                 if (s) {
@@ -1330,6 +1382,8 @@
                 } else {
                     pushBotHtml('<div>📭 تجربه‌ای برای این شغل ثبت نشده است.</div>');
                 }
+            }).fail(function(){
+                pushBotHtml('<div>⚠️ خطا در دریافت اطلاعات این شغل. لطفاً دوباره تلاش کنید.</div>');
             });
         }
 
@@ -1340,13 +1394,11 @@
             var limit = 5;
             var $btn = $(this);
             $btn.prop('disabled', true).text('⏳ در حال دریافت...');
-            $.post(config.ajax_url, {
-                action: "bkja_get_job_records",
-                nonce: config.nonce,
+            ajaxWithNonce('bkja_get_job_records', {
                 job_title: job_title,
                 limit: limit,
                 offset: offset
-            }, function(res) {
+            }).done(function(res) {
                 $btn.prop('disabled', false).text('مشاهده تجربه کاربران این شغل');
                 if (res && res.success && res.data && res.data.records && res.data.records.length) {
                     res.data.records.forEach(function(r) {
@@ -1374,6 +1426,9 @@
                     pushBotHtml('<div>📭 تجربه بیشتری برای این شغل ثبت نشده است.</div>');
                     $btn.remove();
                 }
+            }).fail(function(){
+                $btn.prop('disabled', false).text('نمایش بیشتر تجربه کاربران');
+                pushBotHtml('<div>⚠️ خطا در دریافت تجربه‌های بیشتر. لطفاً دوباره تلاش کنید.</div>');
             });
         });
 
