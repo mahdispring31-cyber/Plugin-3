@@ -53,14 +53,13 @@ class BKJA_Database {
 
         require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
         dbDelta( $sql1 );
-
         // ✅ ایندکس‌های کمکی برای سرعت کوئری سهمیه روزانه
         $indexes = $wpdb->get_col( "SHOW INDEX FROM {$table_chats}", 2 ); // Key_name
-        if ( is_array( $indexes ) ) {
-            if ( ! in_array( 'session_date_idx', $indexes, true ) ) {
+        if ( is_array($indexes) ) {
+            if ( ! in_array('session_date_idx', $indexes, true) ) {
                 $wpdb->query( "ALTER TABLE {$table_chats} ADD INDEX session_date_idx (session_id, created_at)" );
             }
-            if ( ! in_array( 'user_date_idx', $indexes, true ) ) {
+            if ( ! in_array('user_date_idx', $indexes, true) ) {
                 $wpdb->query( "ALTER TABLE {$table_chats} ADD INDEX user_date_idx (user_id, created_at)" );
             }
         }
@@ -105,6 +104,20 @@ class BKJA_Database {
     }
 
     public static function deactivate(){}
+
+    public static function maybe_add_indexes() {
+        global $wpdb;
+        $table_chats = $wpdb->prefix . 'bkja_chats';
+        $indexes = $wpdb->get_col( "SHOW INDEX FROM {$table_chats}", 2 );
+        if ( is_array($indexes) ) {
+            if ( ! in_array('session_date_idx', $indexes, true) ) {
+                $wpdb->query( "ALTER TABLE {$table_chats} ADD INDEX session_date_idx (session_id, created_at)" );
+            }
+            if ( ! in_array('user_date_idx', $indexes, true) ) {
+                $wpdb->query( "ALTER TABLE {$table_chats} ADD INDEX user_date_idx (user_id, created_at)" );
+            }
+        }
+    }
 
     public static function maybe_add_indexes() {
         global $wpdb;
