@@ -183,7 +183,7 @@ function bkja_admin_page(){
 
 			<form method="post" enctype="multipart/form-data" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
 				   <?php wp_nonce_field('bkja_import_jobs','bkja_import_jobs_nonce'); ?>
-				   <input type="hidden" name="action" value="bkja_import_jobs" />
+                                <input type="hidden" name="action" value="bkja_import_preview" />
 				<div class="bkja-form-row">
 					<label>فایل CSV</label>
 					<input type="file" name="bkja_jobs_csv" accept=".csv,text/csv" required />
