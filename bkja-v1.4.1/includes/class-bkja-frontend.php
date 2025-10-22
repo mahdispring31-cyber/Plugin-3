@@ -64,18 +64,15 @@ class BKJA_Frontend {
             global $wpdb;
             $table = $wpdb->prefix . 'bkja_chats';
             // ✅ سهمیهٔ روزانه: فقط پیام‌های امروز را برای مهمان بشمار
-            list( $start_string, $end_string ) = self::get_guest_quota_window();
-
+            $today = current_time('Y-m-d'); // تاریخ روز بر اساس timezone وردپرس
             $msg_count = (int) $wpdb->get_var( $wpdb->prepare(
                 "SELECT COUNT(*) FROM {$table}
                    WHERE session_id = %s
                      AND message IS NOT NULL
-                     AND (response IS NULL OR response = '')
-                     AND created_at >= %s
-                     AND created_at < %s",
+                     AND response IS NULL
+                     AND DATE(created_at) = %s",
                 $session,
-                $start_string,
-                $end_string
+                $today
             ) );
 
             if ( $msg_count >= $free_limit ) {
@@ -173,65 +170,6 @@ class BKJA_Frontend {
             'from_cache'  => $from_cache,
             'meta'        => $meta_payload,
         ));
-    }
-
-    private static function get_guest_quota_window() {
-        $timezone = null;
-
-        if ( function_exists( 'wp_timezone' ) ) {
-            $wp_timezone = wp_timezone();
-            if ( $wp_timezone instanceof DateTimeZone ) {
-                $timezone = $wp_timezone;
-            }
-        }
-
-        if ( ! $timezone ) {
-            $timezone_string = get_option( 'timezone_string' );
-            if ( $timezone_string ) {
-                try {
-                    $timezone = new DateTimeZone( $timezone_string );
-                } catch ( Exception $e ) {
-                    $timezone = null;
-                }
-            }
-        }
-
-        if ( ! $timezone ) {
-            $offset          = (float) get_option( 'gmt_offset', 0 );
-            $offset_seconds  = (int) round( $offset * HOUR_IN_SECONDS );
-            $timezone_name   = false;
-            if ( function_exists( 'timezone_name_from_abbr' ) ) {
-                $timezone_name = timezone_name_from_abbr( '', $offset_seconds, 0 );
-            }
-
-            if ( $timezone_name ) {
-                try {
-                    $timezone = new DateTimeZone( $timezone_name );
-                } catch ( Exception $e ) {
-                    $timezone = null;
-                }
-            }
-        }
-
-        if ( ! $timezone ) {
-            $timezone = new DateTimeZone( 'UTC' );
-        }
-
-        try {
-            $start_of_day = new DateTime( 'now', $timezone );
-        } catch ( Exception $e ) {
-            $timezone     = new DateTimeZone( 'UTC' );
-            $start_of_day = new DateTime( 'now', $timezone );
-        }
-
-        $start_of_day->setTime( 0, 0, 0 );
-        $end_of_day = clone $start_of_day;
-        $end_of_day->modify( '+1 day' );
-
-        return array(
-            $start_of_day->format( 'Y-m-d H:i:s' ),
-            $end_of_day->format( 'Y-m-d H:i:s' ),
-        );
     }
 
     public static function ajax_feedback(){
