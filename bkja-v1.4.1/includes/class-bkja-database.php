@@ -128,14 +128,15 @@ class BKJA_Database {
         global $wpdb;
         $table = $wpdb->prefix . 'bkja_chats';
         $defaults = array(
-            'user_id'=>null,
-            'session_id'=>'',
-            'job_category'=>'',
-            'message'=>'',
-            'response'=>'',
-            'meta'=>null,
-            'status'=>'active',
-            'feedback'=>'none'
+            'user_id'     => null,
+            'session_id'  => '',
+            'job_category'=> '',
+            'message'     => '',
+            'response'    => '',
+            'meta'        => null,
+            'status'      => 'active',
+            'feedback'    => 'none',
+            'created_at'  => current_time( 'mysql' ),
         );
         $row = wp_parse_args( $data, $defaults );
         $row = array_map( 'wp_slash', $row ); // محافظت از داده‌ها
