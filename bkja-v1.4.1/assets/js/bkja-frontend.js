@@ -1015,18 +1015,47 @@
         // === تاریخچه گفتگو ===
         var activeHistoryRequest = null;
 
-        $(document).on("click", "#bkja-open-history", function(){
-            // حذف هر پنل تاریخچه یا دکمه شناور قبلی
-            $(".bkja-history-panel").remove();
-            $("#bkja-close-history").remove();
-            if(activeHistoryRequest && typeof activeHistoryRequest.abort === 'function'){
-                activeHistoryRequest.abort();
-                activeHistoryRequest = null;
+        function findMenuContainer($btn){
+            var $wrap = $btn ? $btn.closest('.bkja-menu-panel') : $();
+            if($wrap && $wrap.length){
+                return $wrap;
             }
-            // اگر پنل وجود ندارد، بساز و اضافه کن
+            var $byId = $('#bkja-menu-panel');
+            if($byId.length){
+                return $byId;
+            }
+            return $('.bkja-menu-panel').first();
+        }
+
+        function closeHistoryPanel(){
+            if(activeHistoryRequest && typeof activeHistoryRequest.abort === 'function'){
+                try { activeHistoryRequest.abort(); } catch (err) {}
+            }
+            activeHistoryRequest = null;
+            $("#bkja-history-panel").remove();
+            $("#bkja-close-history").remove();
+            $("#bkja-open-history").attr('aria-expanded','false');
+        }
+
+        $(document).on("click", "#bkja-open-history", function(){
+            var $btn = $(this);
+            var $existing = $("#bkja-history-panel");
+            if($existing.length){
+                closeHistoryPanel();
+                return;
+            }
+
+            closeHistoryPanel();
+            var $container = findMenuContainer($btn);
+            if(!$container || !$container.length){
+                return;
+            }
+
             var $panel = $('<div id="bkja-history-panel" class="bkja-history-panel"></div>');
-            $("#bkja-menu-panel").append($panel);
+            $container.append($panel);
+            $btn.attr('aria-expanded','true');
             $panel.html('<div class="bkja-history-title">گفتگوهای شما</div><div class="bkja-history-loading">⏳ در حال بارگذاری تاریخچه...</div>');
+
             activeHistoryRequest = $.post(config.ajax_url, {
                 action: "bkja_get_history",
                 nonce: config.nonce,
@@ -1065,11 +1094,11 @@
         });
 
         $(document).on('click', '.bkja-history-retry', function(){
-            $("#bkja-history-panel").remove();
+            closeHistoryPanel();
             $("#bkja-open-history").trigger('click');
         });
         $(document).on("click","#bkja-close-history",function(){
-            $("#bkja-history-panel").remove();
+            closeHistoryPanel();
         });
 
         // === منوی دسته‌ها و شغل‌ها ===
@@ -1077,9 +1106,18 @@
         var categoriesLoaded = false;
 
         function renderHistoryButton(){
-            var $historyBtn = $('<button id="bkja-open-history" type="button" class="bkja-menu-action">🕘 گفتگوهای شما</button>');
-            $("#bkja-menu-panel #bkja-open-history").remove();
-            $(".bkja-profile-section").after($historyBtn);
+            var $container = findMenuContainer();
+            if(!$container || !$container.length){
+                return;
+            }
+            var $historyBtn = $('<button id="bkja-open-history" type="button" class="bkja-menu-action" aria-expanded="false">🕘 گفتگوهای شما</button>');
+            $container.find('#bkja-open-history').remove();
+            var $profileSection = $container.find('.bkja-profile-section').first();
+            if($profileSection.length){
+                $profileSection.after($historyBtn);
+            } else {
+                $container.prepend($historyBtn);
+            }
         }
 
         function showCategoriesError(message){
@@ -1088,6 +1126,7 @@
                 .append('<li class="bkja-menu-empty" data-error="1">'+message+'</li>')
                 .append('<li class="bkja-menu-retry-row"><button type="button" class="bkja-menu-retry">تلاش دوباره</button></li>');
             categoriesLoaded = false;
+            renderHistoryButton();
         }
 
         function loadCategories(force){
@@ -1124,6 +1163,7 @@
                         $target.append($li);
                     });
                     categoriesLoaded = true;
+                    renderHistoryButton();
                 } else {
                     showCategoriesError('⚠️ لیست دسته‌بندی‌ها در دسترس نیست.');
                 }
@@ -1148,7 +1188,7 @@
             var catId = $cat.data("id");
 
             // در صورت باز بودن پنل تاریخچه آن را حذف کن تا جلوی کلیک‌ها را نگیرد
-            $("#bkja-history-panel").remove();
+            closeHistoryPanel();
 
             if(activeCategoryRequest && typeof activeCategoryRequest.abort === 'function'){
                 activeCategoryRequest.abort();
