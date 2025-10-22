@@ -889,6 +889,32 @@
                 sendMessageToServer(text, sendOptions);
             }
             window.dispatchUserMessage = dispatchUserMessage;
+            window.sendMessage = dispatchUserMessage;
+
+            $('#bkja-chat-panel').on('click', function(e){
+                e.stopPropagation();
+            });
+
+            $('#bkja-panel-overlay').on('click', function(){
+                if($('#bkja-chat-panel').hasClass('bkja-open') && typeof window.closePanel === 'function'){
+                    window.closePanel();
+                }
+            });
+
+            $(document).on('click', '.bkja-suggestion', function(e){
+                e.preventDefault();
+                var text = $(this).text();
+                if(text){
+                    text = $.trim(String(text));
+                }
+                if(text && text.length){
+                    if(typeof window.sendMessage === 'function'){
+                        window.sendMessage(text);
+                    } else {
+                        dispatchUserMessage(text);
+                    }
+                }
+            });
 
             function sendMessageToServer(message, opts){
                 opts = opts || {};
@@ -1305,6 +1331,7 @@
                 unlockBody();
                 setTimeout(function(){ $welcome.addClass('bkja-show'); }, 200);
             }
+            window.closePanel = closeChat;
             // هندل کلیک و تاچ برای موبایل و دسکتاپ
             $welcome.on('click touchstart', function(e){
                 e.preventDefault();
@@ -1319,6 +1346,10 @@
                 e.preventDefault();
                 closeChat();
             });
+            $chatPanel.on('click', function(e){
+                e.stopPropagation();
+            });
+
             $overlay.on('click touchstart', function(e){
                 e.preventDefault();
                 if($chatPanel.hasClass('bkja-panel-visible')){

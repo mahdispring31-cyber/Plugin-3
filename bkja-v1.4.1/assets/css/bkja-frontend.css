@@ -966,3 +966,19 @@ body.bkja-body-lock {
   }
 }
 
+/* ✅ اطمینان از اینکه پنل چت روی همه عناصر سایت نمایش داده می‌شود */
+#bkja-chat-launcher,
+#bkja-chat-panel,
+#bkja-panel-overlay,
+#bkja-chatbox,
+#bkja-chat-overlay {
+  position: fixed;
+  z-index: 999999;
+}
+
+/* ✅ جلوگیری از شفاف شدن لانچر هنگام نمایش */
+#bkja-chat-launcher {
+  opacity: 1 !important;
+  transition: opacity 0.2s ease-in-out;
+}
+
