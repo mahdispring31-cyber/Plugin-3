@@ -1050,7 +1050,7 @@
                         html += '<div>📭 تاریخچه‌ای یافت نشد.</div>';
                     }
                     html += '</div>';
-                    html += '<button type="button" id="bkja-close-history" class="bkja-close-menu" style="float:left;">✖ بستن</button>';
+                    html += '<button type="button" id="bkja-close-history" class="bkja-menu-action bkja-history-close">✖ بستن</button>';
                     $panel.html(html).show();
                 }
             });
@@ -1070,7 +1070,7 @@
                     // حذف هر دکمه تاریخچه قبلی
                     $("#bkja-menu-panel #bkja-open-history").remove();
                     // افزودن دکمه گفتگوهای شما بین پروفایل و دسته‌بندی‌ها
-                    var $historyBtn = $('<button id="bkja-open-history" type="button" class="bkja-close-menu" style="margin-bottom:12px;width:100%;font-weight:700;font-size:15px;color:#1976d2;background:linear-gradient(90deg,#e6f7ff,#dff3ff);border-radius:10px;border:none;box-shadow:0 1px 4px rgba(30,144,255,0.08);text-align:right;">🕘 گفتگوهای شما</button>');
+                    var $historyBtn = $('<button id="bkja-open-history" type="button" class="bkja-menu-action">🕘 گفتگوهای شما</button>');
                     $(".bkja-profile-section").after($historyBtn);
                     res.data.categories.forEach(function(cat){
                         var icon = cat.icon || "💼";
@@ -1093,11 +1093,21 @@
         }
         loadCategories();
 
+        var activeCategoryRequest = null;
+
         // کلیک روی دسته → گرفتن شغل‌ها
         $(document).on("click",".bkja-category-item", function(e){
             e.stopPropagation();
             var $cat = $(this);
             var catId = $cat.data("id");
+
+            // در صورت باز بودن پنل تاریخچه آن را حذف کن تا جلوی کلیک‌ها را نگیرد
+            $("#bkja-history-panel").remove();
+
+            if(activeCategoryRequest && typeof activeCategoryRequest.abort === 'function'){
+                activeCategoryRequest.abort();
+                activeCategoryRequest = null;
+            }
 
             if($cat.hasClass("open")){
                 $cat.removeClass("open");
@@ -1114,33 +1124,50 @@
 
             $cat.addClass("open");
             // زیر دسته دقیقا بعد از li دسته قرار گیرد
-            var $sublist = $('<div class="bkja-jobs-sublist">⏳ در حال بارگذاری...</div>');
+            var $sublist = $('<ul class="bkja-jobs-sublist" role="list"></ul>');
+            $sublist.append('<li class="bkja-job-loading">⏳ در حال بارگذاری...</li>');
             // اگر قبلا وجود دارد حذف شود
             $cat.next('.bkja-jobs-sublist').remove();
             // بعد از li اضافه شود
-            $cat.after($sublist);
+            $cat.after($sublist.hide());
+            $sublist.slideDown(180,function(){
+                $(this).css('display','flex');
+            });
 
-            $.post(config.ajax_url,{
+            activeCategoryRequest = $.post(config.ajax_url,{
                 action:"bkja_get_jobs",
                 nonce:config.nonce,
                 category_id:catId
             },function(res){
-                var $sub = $cat.next('.bkja-jobs-sublist').empty();
+                var $sub = $cat.next('.bkja-jobs-sublist');
+                if(!$sub.length){ return; }
+                $sub.empty();
                 if(res && res.success && res.data.jobs && res.data.jobs.length){
                     res.data.jobs.forEach(function(job){
-                        var $j = $('<div class="bkja-job-item" data-id="'+job.id+'">💼 '+esc(job.job_title || job.title)+'</div>');
-                        $sub.append($j);
+                        var title = job.job_title || job.title || '';
+                        if(!title){ return; }
+                        var $item = $('<li class="bkja-job-item" data-id="'+job.id+'"></li>');
+                        $item.append('<span class="bkja-job-icon">💼</span>');
+                        $item.append('<span class="bkja-job-title">'+esc(title)+'</span>');
+                        $sub.append($item);
                     });
-                } else {
-                    $sub.append('<div>❌ شغلی یافت نشد.</div>');
                 }
+                if(!$sub.children().length){
+                    $sub.append('<li class="bkja-job-empty">❌ شغلی یافت نشد.</li>');
+                }
+            }).fail(function(){
+                var $sub = $cat.next('.bkja-jobs-sublist');
+                if(!$sub.length){ return; }
+                $sub.empty().append('<li class="bkja-job-empty">⚠️ خطا در دریافت شغل‌ها. لطفاً دوباره تلاش کنید.</li>');
+            }).always(function(){
+                activeCategoryRequest = null;
             });
         });
 
         // کلیک روی شغل → نمایش خلاصه و رکوردهای شغل
         $(document).on("click", ".bkja-job-item", function(e){
             e.stopPropagation();
-            var jobTitle = $(this).text().replace('💼','').trim();
+            var jobTitle = $(this).find('.bkja-job-title').text().trim();
             $messages.append('<div class="bkja-bubble user">ℹ️ درخواست اطلاعات شغل '+esc(jobTitle)+'</div>');
             $messages.scrollTop($messages.prop("scrollHeight"));
             showJobSummaryAndRecords(jobTitle);
@@ -1273,18 +1300,28 @@
                 var panel = container.querySelector('#bkja-menu-panel, .bkja-menu-panel');
                 var closeBtn = panel ? panel.querySelector('.bkja-close-menu') : null;
                 if(!btn || !panel) return;
-                btn.addEventListener('click', function(e){ 
-                    e.stopPropagation(); 
-                    panel.classList.add('bkja-open'); 
-                    btn.setAttribute('aria-expanded','true'); 
+                btn.addEventListener('click', function(e){
+                    e.stopPropagation();
+                    panel.classList.add('bkja-open');
+                    btn.setAttribute('aria-expanded','true');
+                    var historyPanel = panel.querySelector('#bkja-history-panel');
+                    if(historyPanel){ historyPanel.remove(); }
                     // حذف مخفی‌سازی چت باکس هنگام باز شدن منو
                 });
-                if(closeBtn) closeBtn.addEventListener('click', function(e){ e.preventDefault(); panel.classList.remove('bkja-open'); btn.setAttribute('aria-expanded','false'); });
+                if(closeBtn) closeBtn.addEventListener('click', function(e){
+                    e.preventDefault();
+                    panel.classList.remove('bkja-open');
+                    btn.setAttribute('aria-expanded','false');
+                    var historyPanel = panel.querySelector('#bkja-history-panel');
+                    if(historyPanel){ historyPanel.remove(); }
+                });
                 document.addEventListener('click', function(e){
                     if(!panel.classList.contains('bkja-open')) return;
                     if(panel.contains(e.target) || btn.contains(e.target)) return;
                     panel.classList.remove('bkja-open');
                     btn.setAttribute('aria-expanded','false');
+                    var historyPanel = panel.querySelector('#bkja-history-panel');
+                    if(historyPanel){ historyPanel.remove(); }
                 });
             });
         }
