@@ -495,6 +495,9 @@ class BKJA_Chat {
             if ( ! empty( $summary['genders'] ) ) {
                 $append_line( $lines, 'مخاطبان مناسب: ' . self::truncate_text( $summary['genders'], 80 ) );
             }
+            if ( ! empty( $summary['genders'] ) ) {
+                $lines[] = 'مخاطبان مناسب: ' . $summary['genders'];
+            }
             if ( ! empty( $summary['advantages'] ) ) {
                 $append_line( $lines, 'مزایای پرتکرار: ' . self::truncate_text( $summary['advantages'], 120 ) );
             }
@@ -503,6 +506,9 @@ class BKJA_Chat {
             }
             if ( ! empty( $summary['records_count'] ) ) {
                 $append_line( $lines, 'تعداد کل رکوردهای داخلی برای این عنوان: ' . number_format_i18n( (int) $summary['records_count'] ) );
+            }
+            if ( ! empty( $summary['records_count'] ) ) {
+                $lines[] = 'تعداد کل رکوردهای داخلی برای این عنوان: ' . number_format_i18n( (int) $summary['records_count'] );
             }
         }
 
@@ -568,6 +574,12 @@ class BKJA_Chat {
             if ( ! empty( $summary['disadvantages'] ) ) {
                 $sections[] = '• چالش‌های رایج: ' . self::truncate_text( $summary['disadvantages'], 120 );
             }
+            if ( ! empty( $summary['advantages'] ) ) {
+                $sections[] = '• مهم‌ترین مزایا: ' . $summary['advantages'];
+            }
+            if ( ! empty( $summary['disadvantages'] ) ) {
+                $sections[] = '• چالش‌های رایج: ' . $summary['disadvantages'];
+            }
         } else {
             $sections[] = '• هنوز داده‌ای در پایگاه ما ثبت نشده؛ بنابراین برآوردها باید با احتیاط بررسی شوند.';
         }
@@ -581,8 +593,7 @@ class BKJA_Chat {
         if ( ! empty( $summary['income_reports'] ) ) {
             $income_lines[] = '• تعداد گزارش‌های درآمد: ' . number_format_i18n( (int) $summary['income_reports'] );
         }
-        if ( ! empty( $summary['income_top_samples'] ) && is_array( $summary['income_top_samples'] ) ) {
-            $income_lines[] = '• رایج‌ترین اعداد کاربران: ' . implode( '، ', array_slice( $summary['income_top_samples'], 0, 3 ) );
+        if ( ! empty( $summary['income_top_samples'] ) && is_array( $summary['income_top_samples'] ) ) {            $income_lines[] = '• رایج‌ترین اعداد کاربران: ' . implode( '، ', array_slice( $summary['income_top_samples'], 0, 3 ) );
         }
         $income_samples = array();
         foreach ( array_slice( $records, 0, 3 ) as $record ) {
