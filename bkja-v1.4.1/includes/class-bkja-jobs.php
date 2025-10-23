@@ -40,16 +40,17 @@ class BKJA_Jobs {
     public static function get_jobs_by_category($cat_id) {
         global $wpdb;
         $table = $wpdb->prefix . 'bkja_jobs';
+        $title_column = BKJA_Database::get_job_title_column();
         // لاگ برای بررسی category_id
         if ( defined('WP_DEBUG') && WP_DEBUG ) {
             error_log('BKJA get_jobs_by_category called with category_id: ' . print_r($cat_id, true));
         }
         return $wpdb->get_results($wpdb->prepare(
-            "SELECT MIN(id) AS id, title AS job_title 
-             FROM {$table} 
-             WHERE category_id = %d 
-             GROUP BY title 
-             ORDER BY title ASC",
+            "SELECT MIN(id) AS id, {$title_column} AS job_title
+             FROM {$table}
+             WHERE category_id = %d
+             GROUP BY {$title_column}
+             ORDER BY {$title_column} ASC",
             $cat_id
         ));
     }
@@ -67,9 +68,10 @@ class BKJA_Jobs {
     public static function get_job_detail($job_id) {
         global $wpdb;
         $table = $wpdb->prefix . 'bkja_jobs';
+        $title_column = BKJA_Database::get_job_title_column();
         $row = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT id, title, income, investment, city, gender, advantages, disadvantages, details, created_at, category_id
+                "SELECT id, {$title_column} AS job_title, income, investment, city, gender, advantages, disadvantages, details, created_at, category_id
                  FROM {$table}
                  WHERE id = %d LIMIT 1",
                 $job_id
@@ -79,7 +81,7 @@ class BKJA_Jobs {
 
         return array(
             'id'            => (int)$row->id,
-            'job_title'     => $row->title,
+            'job_title'     => $row->job_title,
             'income'        => $row->income,
             'investment'    => $row->investment,
             'city'          => $row->city,

@@ -5,35 +5,95 @@ Version: 1.5.7
 Description: ابزار دستیار شغلی حرفه‌ای برای وردپرس.
 Author: Mahdi Mohammadi
 */
-// Handle CSV import for jobs
+// Handle CSV import for jobs (legacy endpoint forwards to the new preview workflow)
 add_action('admin_post_bkja_import_jobs', function() {
-	if (!current_user_can('manage_options')) wp_die('دسترسی غیرمجاز');
-	check_admin_referer('bkja_import_jobs');
-	if (!isset($_FILES['bkja_jobs_csv']) || $_FILES['bkja_jobs_csv']['error'] !== UPLOAD_ERR_OK) {
-		wp_redirect(add_query_arg('bkja_import_success', '0', admin_url('admin.php?page=bkja-assistant')));
-		exit;
-	}
-	$file = $_FILES['bkja_jobs_csv']['tmp_name'];
-	$handle = fopen($file, 'r');
-	if ($handle) {
-		$header = fgetcsv($handle);
-		while (($row = fgetcsv($handle)) !== false) {
-			$data = array_combine($header, $row);
-			if ($data && !empty($data['title'])) {
-				$fields = ['category_id','title','income','investment','city','gender','advantages','disadvantages','details'];
-				$job = [];
-				foreach ($fields as $f) {
-					$job[$f] = isset($data[$f]) ? $data[$f] : '';
-				}
-				if (class_exists('BKJA_Database')) {
-					BKJA_Database::insert_job($job);
-				}
-			}
-		}
-		fclose($handle);
-	}
-	wp_redirect(add_query_arg('bkja_import_success', '1', admin_url('admin.php?page=bkja-assistant')));
-	exit;
+        if (function_exists('bkja_import_preview_handler')) {
+                bkja_import_preview_handler();
+                return;
+        }
+
+        if (!current_user_can('manage_options')) {
+                wp_die('دسترسی غیرمجاز');
+        }
+
+        check_admin_referer('bkja_import_jobs');
+
+        if (!isset($_FILES['bkja_jobs_csv']) || $_FILES['bkja_jobs_csv']['error'] !== UPLOAD_ERR_OK) {
+                wp_redirect(add_query_arg('bkja_import_success', '0', admin_url('admin.php?page=bkja-assistant')));
+                exit;
+        }
+
+        $file = $_FILES['bkja_jobs_csv']['tmp_name'];
+        $delimiter = function_exists('bkja_detect_delimiter') ? bkja_detect_delimiter($file) : ',';
+
+        $handle = fopen($file, 'r');
+        if ($handle) {
+                $headers = fgetcsv($handle, 0, $delimiter);
+                if ($headers && function_exists('bkja_strip_bom')) {
+                        $headers[0] = bkja_strip_bom($headers[0]);
+                }
+
+                $map = array();
+                if ($headers && function_exists('bkja_header_index_map')) {
+                        $map = bkja_header_index_map($headers);
+                }
+
+                while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
+                        $data = array();
+
+                        $title_index = isset($map['title']) ? $map['title'] : false;
+                        if ($title_index === false && isset($map['job_title'])) {
+                                $title_index = $map['job_title'];
+                        }
+                        if ($title_index === false && isset($headers)) {
+                                $title_index = array_search('title', $headers, true);
+                                if ($title_index === false) {
+                                        $title_index = array_search('job_title', $headers, true);
+                                }
+                        }
+                        if ($title_index === false || !isset($row[$title_index]) || '' === trim($row[$title_index])) {
+                                continue;
+                        }
+
+                        $title_value = sanitize_text_field($row[$title_index]);
+                        $data['title'] = $title_value;
+                        $data['job_title'] = $title_value;
+
+                        $fields_map = array(
+                                'category_id'  => 'sanitize_text_field',
+                                'income'       => 'sanitize_text_field',
+                                'investment'   => 'sanitize_text_field',
+                                'city'         => 'sanitize_text_field',
+                                'gender'       => 'sanitize_text_field',
+                                'advantages'   => 'sanitize_textarea_field',
+                                'disadvantages'=> 'sanitize_textarea_field',
+                                'details'      => 'sanitize_textarea_field',
+                        );
+
+                        foreach ($fields_map as $column => $callback) {
+                                $index = isset($map[$column]) ? $map[$column] : (isset($headers) ? array_search($column, $headers, true) : false);
+                                if ($index === false || !isset($row[$index])) {
+                                        continue;
+                                }
+
+                                $value = call_user_func($callback, $row[$index]);
+                                if ('category_id' === $column) {
+                                        $data[$column] = (int) $value;
+                                } else {
+                                        $data[$column] = $value;
+                                }
+                        }
+
+                        if (class_exists('BKJA_Database')) {
+                                BKJA_Database::insert_job($data);
+                        }
+                }
+
+                fclose($handle);
+        }
+
+        wp_redirect(add_query_arg('bkja_import_success', '1', admin_url('admin.php?page=bkja-assistant')));
+        exit;
 });
 
 // API for jobs - get job records (with advanced filters)
@@ -54,10 +114,11 @@ function bkja_get_jobs_api(WP_REST_Request $request) {
 		$where .= ' AND category_id = %d';
 		$params[] = $category;
 	}
-	if ($title = $request->get_param('title')) {
-		$where .= ' AND title LIKE %s';
-		$params[] = '%' . $wpdb->esc_like($title) . '%';
-	}
+        $title_column = BKJA_Database::get_job_title_column();
+        if ($title = $request->get_param('title')) {
+                $where .= " AND {$title_column} LIKE %s";
+                $params[] = '%' . $wpdb->esc_like($title) . '%';
+        }
 	if ($city = $request->get_param('city')) {
 		$where .= ' AND city LIKE %s';
 		$params[] = '%' . $wpdb->esc_like($city) . '%';
