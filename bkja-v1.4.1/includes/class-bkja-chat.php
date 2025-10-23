@@ -1030,52 +1030,6 @@ class BKJA_Chat {
 
         $api_key = self::get_api_key();
 
-        if ( empty( $api_key ) ) {
-            $fallback_context = $context;
-            if ( empty( $fallback_context ) ) {
-                $fallback_context = array();
-            }
-
-            $job_title_for_meta = '';
-            if ( ! empty( $fallback_context['job_title'] ) ) {
-                $job_title_for_meta = $fallback_context['job_title'];
-            } elseif ( '' !== $cache_job_title ) {
-                $job_title_for_meta = $cache_job_title;
-            }
-
-            if ( ! empty( $fallback_context ) ) {
-                return self::build_response_payload(
-                    self::format_job_context_reply( $fallback_context ),
-                    $fallback_context,
-                    $message,
-                    false,
-                    'job_context',
-                    array(
-                        'model'              => $model,
-                        'category'           => $resolved_category,
-                        'job_title'          => $job_title_for_meta,
-                        'job_slug'           => ! empty( $fallback_context['job_slug'] ) ? $fallback_context['job_slug'] : $job_slug,
-                        'normalized_message' => $normalized_message,
-                    )
-                );
-            }
-
-            return self::build_response_payload(
-                'برای دریافت پاسخ دقیق‌تر لازم است مدیر سایت کلید API را در تنظیمات افزونه وارد کند. تا آن زمان می‌توانم صرفاً راهنمایی‌های کلی ارائه دهم.',
-                array(),
-                $message,
-                false,
-                'local_fallback',
-                array(
-                    'model'              => $model,
-                    'category'           => $resolved_category,
-                    'job_title'          => $job_title_for_meta,
-                    'job_slug'           => $job_slug,
-                    'normalized_message' => $normalized_message,
-                )
-            );
-        }
-
         $cache_enabled   = self::is_cache_enabled();
         if ( '' === $cache_job_title ) {
             if ( ! empty( $context['job_title'] ) ) {
@@ -1183,7 +1137,38 @@ class BKJA_Chat {
                 return $fallback_payload;
             }
 
-            return new WP_Error( 'no_api_key', 'API key not configured' );
+            $job_title_for_meta = '';
+            if ( ! empty( $context['job_title'] ) ) {
+                $job_title_for_meta = $context['job_title'];
+            } elseif ( '' !== $cache_job_title ) {
+                $job_title_for_meta = $cache_job_title;
+            }
+
+            $job_slug_value = '';
+            if ( ! empty( $context['job_slug'] ) ) {
+                $job_slug_value = $context['job_slug'];
+            } elseif ( '' !== $job_slug ) {
+                $job_slug_value = $job_slug;
+            }
+
+            $local_payload = self::build_response_payload(
+                'برای دریافت پاسخ دقیق‌تر لازم است مدیر سایت کلید API را در تنظیمات افزونه وارد کند. تا آن زمان می‌توانم صرفاً راهنمایی‌های کلی ارائه دهم.',
+                ! empty( $context ) ? $context : array(),
+                $message,
+                false,
+                'local_fallback',
+                array(
+                    'model'              => $model,
+                    'category'           => $resolved_category,
+                    'job_title'          => $job_title_for_meta,
+                    'job_slug'           => $job_slug_value,
+                    'normalized_message' => $normalized_message,
+                )
+            );
+
+            self::cache_payload( $cache_enabled, $cache_key, $local_payload, $model );
+
+            return $local_payload;
         }
 
         $messages = array(
