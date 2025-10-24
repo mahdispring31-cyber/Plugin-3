@@ -33,6 +33,13 @@ class BKJA_Database {
             KEY session_idx (session_id)
         ) {$charset_collate};";
 
+        $table_categories = $wpdb->prefix . 'bkja_categories';
+        $sql_categories = "CREATE TABLE IF NOT EXISTS `{$table_categories}` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `name` VARCHAR(255) NOT NULL,
+            PRIMARY KEY (`id`)
+        ) {$charset_collate};";
+
         $table_jobs = $wpdb->prefix . 'bkja_jobs';
         $sql2 = "CREATE TABLE IF NOT EXISTS `{$table_jobs}` (
             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -53,7 +60,31 @@ class BKJA_Database {
 
         require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
         dbDelta( $sql1 );
+        dbDelta( $sql_categories );
         dbDelta( $sql2 );
+
+        // Ensure default categories exist when the table is empty
+        $category_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table_categories}" );
+        if ( 0 === $category_count ) {
+            $default_categories = array(
+                'خدماتی',
+                'فنی',
+                'اداری',
+                'پزشکی',
+                'آموزشی',
+                'بازرگانی',
+                'کشاورزی',
+                'هنر و رسانه',
+                'تکنولوژی و استارتاپ',
+                'صنعت و تولید',
+                'مشاوره و خدمات تخصصی',
+                'مشاغل خارجی',
+            );
+
+            foreach ( $default_categories as $category_name ) {
+                $wpdb->insert( $table_categories, array( 'name' => $category_name ) );
+            }
+        }
 
         $table_feedback = $wpdb->prefix . 'bkja_feedback';
         $sql3 = "CREATE TABLE IF NOT EXISTS {$table_feedback} (
