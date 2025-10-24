@@ -181,4 +181,38 @@ function bkja_ajax_get_jobs(){ check_ajax_referer('bkja_nonce','nonce'); $cat = 
 
 add_action('wp_ajax_bkja_get_job_detail','bkja_ajax_get_job_detail');
 add_action('wp_ajax_nopriv_bkja_get_job_detail','bkja_ajax_get_job_detail');
-function bkja_ajax_get_job_detail(){ check_ajax_referer('bkja_nonce','nonce'); $job_id = isset($_POST['job_id'])? intval($_POST['job_id']):0; $job = BKJA_Jobs::get_job_detail($job_id); if(!$job) wp_send_json_error(['error'=>'not_found'],404); global $wpdb; $table_chats = $wpdb->prefix.'bkja_chats'; if($wpdb->get_var("SHOW TABLES LIKE '{$table_chats}'") == $table_chats){ $wpdb->insert($table_chats,['user_id'=>get_current_user_id()?:null,'session_id'=>isset($_POST['session'])?sanitize_text_field($_POST['session']):null,'job_category'=>$job->category_id,'message'=>null,'response'=>wp_json_encode(['type'=>'job_card','data'=>$job]),'created_at'=>current_time('mysql')]); } wp_send_json_success(['job'=>$job]); }
+function bkja_ajax_get_job_detail(){
+        check_ajax_referer('bkja_nonce','nonce');
+
+        $job_id = isset($_POST['job_id']) ? intval($_POST['job_id']) : 0;
+        $job    = BKJA_Jobs::get_job_detail($job_id);
+
+        if(!$job){
+                wp_send_json_error(['error'=>'not_found'],404);
+        }
+
+        $job_data     = $job;
+        $category_id  = isset($job_data['category_id']) ? (int) $job_data['category_id'] : 0;
+
+        global $wpdb;
+        $table_chats = $wpdb->prefix.'bkja_chats';
+
+        if($wpdb->get_var("SHOW TABLES LIKE '{$table_chats}'") == $table_chats){
+                $wpdb->insert(
+                        $table_chats,
+                        [
+                                'user_id'      => get_current_user_id() ?: null,
+                                'session_id'   => isset($_POST['session']) ? sanitize_text_field($_POST['session']) : null,
+                                'job_category' => $category_id,
+                                'message'      => null,
+                                'response'     => wp_json_encode([
+                                        'type' => 'job_card',
+                                        'data' => $job_data,
+                                ]),
+                                'created_at'   => current_time('mysql'),
+                        ]
+                );
+        }
+
+        wp_send_json_success(['job'=>$job_data]);
+}

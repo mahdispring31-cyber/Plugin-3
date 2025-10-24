@@ -1034,18 +1034,22 @@
         });
 
         // === منوی دسته‌ها و شغل‌ها ===
+        function ensureHistoryButton(){
+            if($('#bkja-open-history').length){
+                return;
+            }
+            var $historyBtn = $('<button id="bkja-open-history" type="button" class="bkja-close-menu" style="margin-bottom:12px;width:100%;font-weight:700;font-size:15px;color:#1976d2;background:linear-gradient(90deg,#e6f7ff,#dff3ff);border-radius:10px;border:none;box-shadow:0 1px 4px rgba(30,144,255,0.08);text-align:right;">🕘 گفتگوهای شما</button>');
+            $(".bkja-profile-section").after($historyBtn);
+        }
         function loadCategories(){
+            var $list = $("#bkja-categories-list");
             $.post(config.ajax_url, {
                 action: "bkja_get_categories",
                 nonce: config.nonce
             }, function(res){
-                if(res && res.success && res.data.categories){
-                    var $list = $("#bkja-categories-list").empty();
-                    // حذف هر دکمه تاریخچه قبلی
-                    $("#bkja-menu-panel #bkja-open-history").remove();
-                    // افزودن دکمه گفتگوهای شما بین پروفایل و دسته‌بندی‌ها
-                    var $historyBtn = $('<button id="bkja-open-history" type="button" class="bkja-close-menu" style="margin-bottom:12px;width:100%;font-weight:700;font-size:15px;color:#1976d2;background:linear-gradient(90deg,#e6f7ff,#dff3ff);border-radius:10px;border:none;box-shadow:0 1px 4px rgba(30,144,255,0.08);text-align:right;">🕘 گفتگوهای شما</button>');
-                    $(".bkja-profile-section").after($historyBtn);
+                $list.empty();
+                ensureHistoryButton();
+                if(res && res.success && res.data && Array.isArray(res.data.categories) && res.data.categories.length){
                     res.data.categories.forEach(function(cat){
                         var icon = cat.icon || "💼";
                         if(cat.name){
@@ -1062,7 +1066,12 @@
                         var $li = $('<li class="bkja-category-item" data-id="'+cat.id+'"><span class="bkja-cat-icon">'+icon+'</span> <span>'+esc(cat.name)+'</span></li>');
                         $list.append($li);
                     });
+                } else {
+                    $list.append('<li class="bkja-category-empty">📭 دسته‌بندی‌ای پیدا نشد.</li>');
                 }
+            }).fail(function(){
+                ensureHistoryButton();
+                $list.empty().append('<li class="bkja-category-empty">⚠️ خطا در دریافت دسته‌بندی‌ها</li>');
             });
         }
         loadCategories();

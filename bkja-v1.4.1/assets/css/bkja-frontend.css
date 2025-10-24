@@ -649,6 +649,15 @@ body.bkja-body-lock {
   transition: transform 0.18s ease, background 0.18s ease;
 }
 
+.bkja-category-empty {
+  padding: 10px 14px;
+  border-radius: var(--bkja-radius-sm);
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--bkja-muted);
+  text-align: right;
+  cursor: default;
+}
+
 .bkja-menu-cats li:hover,
 .bkja-jobs-sublist li:hover {
   transform: translateY(-1px);

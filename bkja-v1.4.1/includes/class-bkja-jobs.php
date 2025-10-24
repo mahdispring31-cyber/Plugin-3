@@ -6,6 +6,7 @@ class BKJA_Jobs {
     // جستجوی پیشرفته مشاغل برای پنل مدیریت و API
     public static function get_jobs($per_page=20, $page_number=1, $city_filter='', $income_min=0, $income_max=0) {
         global $wpdb;
+        BKJA_Database::ensure_core_tables();
         $table = $wpdb->prefix . 'bkja_jobs';
         $sql = "SELECT * FROM {$table} WHERE 1=1";
         $params = [];
@@ -32,6 +33,9 @@ class BKJA_Jobs {
     // گرفتن دسته‌ها
     public static function get_categories() {
         global $wpdb;
+
+        BKJA_Database::ensure_categories_seeded();
+
         $table = $wpdb->prefix . 'bkja_categories';
         return $wpdb->get_results("SELECT id, name FROM {$table} ORDER BY id ASC");
     }
@@ -39,6 +43,7 @@ class BKJA_Jobs {
     // لیست عناوین شغل در یک دسته (Distinct by title as job_title, همراه با id)
     public static function get_jobs_by_category($cat_id) {
         global $wpdb;
+        BKJA_Database::ensure_core_tables();
         $table = $wpdb->prefix . 'bkja_jobs';
         // لاگ برای بررسی category_id
         if ( defined('WP_DEBUG') && WP_DEBUG ) {
@@ -66,6 +71,7 @@ class BKJA_Jobs {
     // گرفتن جزئیات کامل یک شغل (برای ارسال به JS)
     public static function get_job_detail($job_id) {
         global $wpdb;
+        BKJA_Database::ensure_core_tables();
         $table = $wpdb->prefix . 'bkja_jobs';
         $row = $wpdb->get_row(
             $wpdb->prepare(

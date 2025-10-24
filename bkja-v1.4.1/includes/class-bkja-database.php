@@ -11,6 +11,88 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 class BKJA_Database {
 
+    /**
+     * دریافت نام جدول با درنظر گرفتن پیشوند وردپرس
+     */
+    private static function table_name( $suffix ) {
+        global $wpdb;
+
+        return $wpdb->prefix . 'bkja_' . $suffix;
+    }
+
+    /**
+     * بررسی وجود جدول در پایگاه‌داده
+     */
+    private static function table_exists( $table ) {
+        global $wpdb;
+
+        $exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+
+        return $exists === $table;
+    }
+
+    /**
+     * لیست دسته‌بندی‌های پیش‌فرض مشاغل
+     */
+    private static function get_default_categories() {
+        return array(
+            'خدماتی',
+            'فنی',
+            'اداری',
+            'پزشکی',
+            'آموزشی',
+            'بازرگانی',
+            'کشاورزی',
+            'هنر و رسانه',
+            'تکنولوژی و استارتاپ',
+            'صنعت و تولید',
+            'مشاوره و خدمات تخصصی',
+            'مشاغل خارجی',
+        );
+    }
+
+    /**
+     * در صورت نبود جدول‌های اصلی یا خالی بودن دسته‌بندی‌ها، آن‌ها را دوباره می‌سازد
+     */
+    public static function ensure_core_tables() {
+        $tables = array(
+            self::table_name( 'chats' ),
+            self::table_name( 'categories' ),
+            self::table_name( 'jobs' ),
+        );
+
+        foreach ( $tables as $table ) {
+            if ( ! self::table_exists( $table ) ) {
+                self::activate();
+                break;
+            }
+        }
+
+        self::ensure_categories_seeded();
+    }
+
+    /**
+     * اطمینان از این‌که جدول دسته‌بندی و داده‌های پیش‌فرض وجود دارند
+     */
+    public static function ensure_categories_seeded() {
+        global $wpdb;
+
+        $table = self::table_name( 'categories' );
+
+        if ( ! self::table_exists( $table ) ) {
+            self::activate();
+            return;
+        }
+
+        $category_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+
+        if ( 0 === $category_count ) {
+            foreach ( self::get_default_categories() as $category_name ) {
+                $wpdb->insert( $table, array( 'name' => $category_name ) );
+            }
+        }
+    }
+
     // ایجاد جدول‌ها (محافظت‌شده، dbDelta idempotent)
     public static function activate() {
         global $wpdb;
@@ -33,6 +115,13 @@ class BKJA_Database {
             KEY session_idx (session_id)
         ) {$charset_collate};";
 
+        $table_categories = $wpdb->prefix . 'bkja_categories';
+        $sql_categories = "CREATE TABLE IF NOT EXISTS `{$table_categories}` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `name` VARCHAR(255) NOT NULL,
+            PRIMARY KEY (`id`)
+        ) {$charset_collate};";
+
         $table_jobs = $wpdb->prefix . 'bkja_jobs';
         $sql2 = "CREATE TABLE IF NOT EXISTS `{$table_jobs}` (
             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -53,7 +142,10 @@ class BKJA_Database {
 
         require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
         dbDelta( $sql1 );
+        dbDelta( $sql_categories );
         dbDelta( $sql2 );
+
+        self::ensure_categories_seeded();
 
         $table_feedback = $wpdb->prefix . 'bkja_feedback';
         $sql3 = "CREATE TABLE IF NOT EXISTS {$table_feedback} (
@@ -100,6 +192,8 @@ class BKJA_Database {
      */
     public static function insert_chat( $data = array() ){
         global $wpdb;
+        self::ensure_core_tables();
+
         $table = $wpdb->prefix . 'bkja_chats';
         $defaults = array(
             'user_id'=>null,
@@ -113,8 +207,13 @@ class BKJA_Database {
         );
         $row = wp_parse_args( $data, $defaults );
         $row = array_map( 'wp_slash', $row ); // محافظت از داده‌ها
-        $wpdb->insert( $table, $row );
-        return $wpdb->insert_id;
+        $inserted = $wpdb->insert( $table, $row );
+
+        if ( false === $inserted ) {
+            return new WP_Error( 'bkja_db_insert_failed', $wpdb->last_error ? $wpdb->last_error : 'Database insert failed.' );
+        }
+
+        return (int) $wpdb->insert_id;
     }
 
     /**
@@ -123,6 +222,8 @@ class BKJA_Database {
      */
     public static function insert_job( $data = array() ) {
         global $wpdb;
+        self::ensure_core_tables();
+
         $table = $wpdb->prefix . 'bkja_jobs';
         $row = [
             'category_id'   => isset($data['category_id']) ? sanitize_text_field($data['category_id']) : 0,
@@ -135,8 +236,13 @@ class BKJA_Database {
             'disadvantages' => isset($data['disadvantages']) ? sanitize_textarea_field($data['disadvantages']) : '',
             'details'       => isset($data['details']) ? sanitize_textarea_field($data['details']) : '',
         ];
-        $wpdb->insert($table, $row);
-        $insert_id = $wpdb->insert_id;
+        $inserted = $wpdb->insert($table, $row);
+
+        if ( false === $inserted ) {
+            return new WP_Error( 'bkja_db_insert_failed', $wpdb->last_error ? $wpdb->last_error : 'Database insert failed.' );
+        }
+
+        $insert_id = (int) $wpdb->insert_id;
 
         if ( class_exists( 'BKJA_Chat' ) ) {
             BKJA_Chat::flush_cache_prefix();
@@ -147,6 +253,8 @@ class BKJA_Database {
 
     public static function insert_feedback( $data = array() ) {
         global $wpdb;
+
+        self::ensure_feedback_table();
 
         $table = $wpdb->prefix . 'bkja_feedback';
 
@@ -172,9 +280,13 @@ class BKJA_Database {
         $row['comment']    = sanitize_textarea_field( $row['comment'] );
         $row['created_at'] = sanitize_text_field( $row['created_at'] );
 
-        $wpdb->insert( $table, $row );
+        $inserted = $wpdb->insert( $table, $row );
 
-        return $wpdb->insert_id;
+        if ( false === $inserted ) {
+            return new WP_Error( 'bkja_db_insert_failed', $wpdb->last_error ? $wpdb->last_error : 'Database insert failed.' );
+        }
+
+        return (int) $wpdb->insert_id;
     }
 
     public static function get_latest_feedback( $normalized_message, $session_id = '', $user_id = 0 ) {
@@ -213,10 +325,9 @@ class BKJA_Database {
     public static function ensure_feedback_table() {
         global $wpdb;
 
-        $table  = $wpdb->prefix . 'bkja_feedback';
-        $exists = $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $table ) );
+        $table  = self::table_name( 'feedback' );
 
-        if ( $exists !== $table ) {
+        if ( ! self::table_exists( $table ) ) {
             self::activate();
         }
     }
@@ -370,6 +481,8 @@ class BKJA_Database {
      */
     public static function get_user_history( $user_id, $limit = 200 ){
         global $wpdb;
+        self::ensure_core_tables();
+
         $table = $wpdb->prefix . 'bkja_chats';
         return $wpdb->get_results( $wpdb->prepare(
             "SELECT id, session_id, job_category, message, response, created_at 
@@ -385,6 +498,8 @@ class BKJA_Database {
      */
     public static function get_history_by_session( $session_id, $limit = 200 ){
         global $wpdb;
+        self::ensure_core_tables();
+
         $table = $wpdb->prefix . 'bkja_chats';
         return $wpdb->get_results( $wpdb->prepare(
             "SELECT id, session_id, job_category, message, response, created_at 
@@ -401,6 +516,8 @@ class BKJA_Database {
      */
     public static function get_recent_conversation( $session_id = '', $user_id = 0, $limit = 10 ) {
         global $wpdb;
+        self::ensure_core_tables();
+
         $table = $wpdb->prefix . 'bkja_chats';
 
         $where  = '';
@@ -451,6 +568,8 @@ class BKJA_Database {
      */
     public static function get_category_id_by_name($name) {
         global $wpdb;
+        self::ensure_core_tables();
+
         $table = $wpdb->prefix . 'bkja_categories';
         return $wpdb->get_var( $wpdb->prepare("SELECT id FROM {$table} WHERE name = %s LIMIT 1", $name) );
     }
@@ -460,6 +579,9 @@ class BKJA_Database {
      */
     public static function get_job_summary($job_title) {
         global $wpdb;
+
+        self::ensure_core_tables();
+
         $table = $wpdb->prefix . 'bkja_jobs';
 
         $rows = $wpdb->get_results(

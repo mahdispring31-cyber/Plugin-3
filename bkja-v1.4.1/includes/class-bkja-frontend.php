@@ -71,13 +71,17 @@ class BKJA_Frontend {
         }
 
         // save user message
-        BKJA_Database::insert_chat(array(
+        $user_message_id = BKJA_Database::insert_chat(array(
             'user_id'      => $user_id ?: null,
             'session_id'   => $session,
             'job_category' => $category,
             'message'      => $message,
             'response'     => null
         ));
+
+        if ( is_wp_error( $user_message_id ) ) {
+            wp_send_json_error(array('error' => 'db_error', 'message' => $user_message_id->get_error_message()), 500);
+        }
 
         $selected_model = get_option('bkja_model', '');
         $resolved_model = BKJA_Chat::resolve_model($selected_model);
@@ -141,7 +145,7 @@ class BKJA_Frontend {
         }
 
         // save bot reply
-        BKJA_Database::insert_chat(array(
+        $bot_message_id = BKJA_Database::insert_chat(array(
             'user_id'      => $user_id ?: null,
             'session_id'   => $session,
             'job_category' => $category,
@@ -149,6 +153,10 @@ class BKJA_Frontend {
             'response'     => $reply,
             'meta'         => $reply_meta
         ));
+
+        if ( is_wp_error( $bot_message_id ) ) {
+            wp_send_json_error(array('error' => 'db_error', 'message' => $bot_message_id->get_error_message()), 500);
+        }
 
         wp_send_json_success(array(
             'reply'       => $reply,
@@ -189,7 +197,7 @@ class BKJA_Frontend {
 
         if ( class_exists('BKJA_Database') ) {
             BKJA_Database::ensure_feedback_table();
-            BKJA_Database::insert_feedback(array(
+            $feedback_id = BKJA_Database::insert_feedback(array(
                 'session_id' => $session,
                 'user_id'    => get_current_user_id() ?: 0,
                 'message'    => $normalized_message,
@@ -198,6 +206,10 @@ class BKJA_Frontend {
                 'tags'       => $tags,
                 'comment'    => $comment,
             ));
+
+            if ( is_wp_error( $feedback_id ) ) {
+                wp_send_json_error(array('error'=>'db_error','message'=>$feedback_id->get_error_message()),500);
+            }
         }
 
         if ( -1 === $vote ) {
