@@ -1,6 +1,25 @@
 <?php if ( ! defined( 'ABSPATH' ) ) exit;
 
 class BKJA_Frontend {
+    private static function normalize_session_id( $session, $user_id ) {
+        $session = is_string( $session ) ? sanitize_text_field( wp_unslash( $session ) ) : '';
+
+        if ( strlen( $session ) > 64 ) {
+            $session = substr( $session, 0, 64 );
+        }
+
+        if ( $user_id ) {
+            return $session;
+        }
+
+        if ( '' === $session ) {
+            $session = 'guest_' . strtolower( wp_generate_password( 20, false ) );
+            $session = substr( $session, 0, 32 );
+        }
+
+        return $session;
+    }
+
     public static function init(){
         add_shortcode('bkja_assistant', array(__CLASS__,'render_chatbox'));
         add_action('wp_enqueue_scripts', array(__CLASS__,'enqueue_assets'));
@@ -42,7 +61,7 @@ class BKJA_Frontend {
         check_ajax_referer('bkja_nonce','nonce');
         $message         = isset($_POST['message']) ? sanitize_textarea_field(wp_unslash($_POST['message'])) : '';
         $category        = isset($_POST['category']) ? sanitize_text_field(wp_unslash($_POST['category'])) : '';
-        $session         = isset($_POST['session']) ? sanitize_text_field(wp_unslash($_POST['session'])) : '';
+        $session         = isset($_POST['session']) ? $_POST['session'] : '';
         $job_title_hint  = isset($_POST['job_title']) ? sanitize_text_field(wp_unslash($_POST['job_title'])) : '';
         $job_slug        = isset($_POST['job_slug']) ? sanitize_text_field(wp_unslash($_POST['job_slug'])) : '';
 
@@ -51,22 +70,19 @@ class BKJA_Frontend {
         }
 
         $user_id = get_current_user_id() ?: 0;
+        $session = self::normalize_session_id( $session, $user_id );
     $free_limit = (int)get_option('bkja_free_messages_per_day',5);
     // تعیین آدرس ورود/عضویت ووکامرس اگر فعال است
     $login_url = function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url();
 
         // اگر کاربر مهمان است، تعداد پیام‌های ارسالی را بررسی کن
         if(!$user_id){
-            // session_id باید مقدار داشته باشد و معتبر باشد
-            if(empty($session) || strpos($session, 'guest_') !== 0){
-                wp_send_json_error(array('error'=>'invalid_session','msg'=>'جلسه مهمان معتبر نیست.'),400);
-            }
             global $wpdb;
             $table = $wpdb->prefix . 'bkja_chats';
             // فقط پیام‌های واقعی کاربر مهمان را بشمار (response باید NULL باشد)
             $msg_count = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE session_id = %s AND message IS NOT NULL AND response IS NULL", $session));
             if($msg_count >= $free_limit){
-                wp_send_json_error(array('error'=>'guest_limit','msg'=>'برای ادامه گفتگو باید عضو سایت شوید.','login_url'=>$login_url),403);
+                wp_send_json_error(array('error'=>'guest_limit','msg'=>'برای ادامه گفتگو باید عضو سایت شوید.','login_url'=>$login_url,'session'=>$session),403);
             }
         }
 
@@ -80,7 +96,7 @@ class BKJA_Frontend {
         ));
 
         if ( is_wp_error( $user_message_id ) ) {
-            wp_send_json_error(array('error' => 'db_error', 'message' => $user_message_id->get_error_message()), 500);
+            wp_send_json_error(array('error' => 'db_error', 'message' => $user_message_id->get_error_message(), 'session' => $session), 500);
         }
 
         $selected_model = get_option('bkja_model', '');
@@ -155,7 +171,7 @@ class BKJA_Frontend {
         ));
 
         if ( is_wp_error( $bot_message_id ) ) {
-            wp_send_json_error(array('error' => 'db_error', 'message' => $bot_message_id->get_error_message()), 500);
+            wp_send_json_error(array('error' => 'db_error', 'message' => $bot_message_id->get_error_message(), 'session' => $session), 500);
         }
 
         wp_send_json_success(array(
@@ -163,6 +179,7 @@ class BKJA_Frontend {
             'suggestions' => $suggestions,
             'from_cache'  => $from_cache,
             'meta'        => $meta_payload,
+            'session'     => $session,
         ));
     }
 

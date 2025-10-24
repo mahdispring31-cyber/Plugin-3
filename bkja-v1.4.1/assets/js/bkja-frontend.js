@@ -171,13 +171,32 @@
             ]
         };
 
-        function getSessionId(){ 
-            var s = localStorage.getItem('bkja_session_id'); 
-            if(!s){ 
-                s = 'guest_' + Math.random().toString(36).substr(2,9); 
-                localStorage.setItem('bkja_session_id', s);
-            } 
-            return s; 
+        function isValidSessionId(value){
+            if(typeof value !== 'string'){ return false; }
+            var trimmed = value.trim();
+            if(!trimmed){ return false; }
+            if(trimmed.length > 64){ return false; }
+            return true;
+        }
+
+        function generateSessionId(){
+            var random = Math.random().toString(36).slice(2) + Date.now().toString(36);
+            var id = 'guest_' + random;
+            if(id.length > 32){
+                id = id.slice(0, 32);
+            }
+            return id;
+        }
+
+        function getSessionId(){
+            var s = localStorage.getItem('bkja_session_id');
+            if(!isValidSessionId(s)){
+                s = generateSessionId();
+            } else {
+                s = s.trim();
+            }
+            localStorage.setItem('bkja_session_id', s);
+            return s;
         }
         var sessionId = getSessionId();
 
@@ -897,7 +916,7 @@
                 payload.append('action', 'bkja_send_message');
                 payload.append('nonce', config.nonce);
                 payload.append('message', message);
-                payload.append('session', sessionId);
+                payload.append('session', sessionId || '');
                 payload.append('category', opts.category || '');
                 var jobTitleParam = cleanJobHint(opts.jobTitle);
                 var jobSlugParam = cleanJobHint(opts.jobSlug);
@@ -929,6 +948,14 @@
                     });
                 }).then(function(res){
                     personalityFlow.awaitingResult = false;
+                    if(res && res.data && res.data.session){
+                        var newSession = String(res.data.session).trim();
+                        if(isValidSessionId(newSession)){
+                            sessionId = newSession;
+                            localStorage.setItem('bkja_session_id', sessionId);
+                        }
+                    }
+
                     if(res && res.success){
                         var reply = res.data.reply || '';
                         var suggestions = Array.isArray(res.data.suggestions) ? res.data.suggestions : [];
@@ -970,6 +997,14 @@
                 }).catch(function(err){
                     personalityFlow.awaitingResult = false;
                     var data = err && err.data ? err.data : null;
+                    if(data && data.session){
+                        var fallbackSession = String(data.session).trim();
+                        if(isValidSessionId(fallbackSession)){
+                            sessionId = fallbackSession;
+                            localStorage.setItem('bkja_session_id', sessionId);
+                        }
+                    }
+
                     if(data && data.error === 'guest_limit'){
                         var loginUrl = (data.login_url || '/wp-login.php');
                         pushBotHtml('<div style="color:#d32f2f;font-weight:700;padding:12px 0;">برای ادامه گفتگو باید عضو سایت شوید.<br> <a href="'+loginUrl+'" style="color:#1976d2;text-decoration:underline;font-weight:700;">ورود یا ثبت‌نام</a></div>');
